@@ -47,6 +47,14 @@ final class WebVerification {
         ed.view.dispatch({selection:{anchor:at,head:at+5}});ed.wrap('**');
         await api.request('ready');
         const saved=ed.buffer.raw;
+        ed.view.dispatch({selection:{anchor:ed.view.state.doc.length}});
+        const editorPaste=new DataTransfer();
+        editorPaste.setData('text/html','<table><tr><th>Name</th><th>Value</th></tr><tr><td>Alpha</td><td>42</td></tr></table>');
+        editorPaste.setData('text/plain','Name\tValue\nAlpha\t42');
+        ed.view.contentDOM.dispatchEvent(new ClipboardEvent('paste',{clipboardData:editorPaste,bubbles:true,cancelable:true}));
+        check(ed.buffer.raw.includes('| Name | Value |') && ed.buffer.raw.includes('| --- | --- |'),'Editor paste converts clipboard HTML into Markdown table');
+        ed.undo();check(ed.buffer.raw===saved,'Pasted Markdown table undoes in one step');
+        ed.view.dispatch({selection:{anchor:0},scrollIntoView:true});
         const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
         await nextFrame();
         const lineDOM=ed.view.contentDOM.querySelector('.cm-line');

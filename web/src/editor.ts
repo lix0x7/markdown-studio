@@ -52,6 +52,7 @@ import {
   type TableModel,
 } from "./source";
 import { request } from "./bridge";
+import { clipboardTable } from "./clipboard-table";
 
 export const mode = new Compartment();
 const viewport = StateEffect.define<{ from: number; to: number }>();
@@ -94,7 +95,10 @@ class BlockWidget extends WidgetType {
       const observer = new ResizeObserver(() => {
         const content = view.contentDOM;
         const style = getComputedStyle(content);
-        const available = content.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        const available =
+          content.clientWidth -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight);
         table.style.minWidth = "0";
         const naturalWidth = table.getBoundingClientRect().width;
         table.style.minWidth = "";
@@ -661,7 +665,34 @@ export class MarkdownEditor {
               view.focus();
               return true;
             },
-            paste: (event) => {
+            paste: (event, view) => {
+              const selection = view.state.selection.main;
+              let node = syntaxTree(view.state).resolveInner(
+                selection.from,
+                -1,
+              );
+              let inCode = false;
+              for (let n: typeof node | null = node; n; n = n.parent) {
+                if (["FencedCode", "CodeBlock", "InlineCode"].includes(n.name))
+                  inCode = true;
+              }
+              const table =
+                !inCode &&
+                clipboardTable(
+                  event.clipboardData?.getData("text/html") ?? "",
+                  event.clipboardData?.getData("text/plain") ?? "",
+                );
+              if (table) {
+                event.preventDefault();
+                const insert = "\n\n" + table + "\n\n";
+                view.dispatch({
+                  changes: { from: selection.from, to: selection.to, insert },
+                  selection: { anchor: selection.from + insert.length },
+                  userEvent: "input.paste",
+                  scrollIntoView: true,
+                });
+                return true;
+              }
               const files = Array.from(event.clipboardData?.files ?? []).filter(
                 (f) => f.type.startsWith("image/"),
               );
