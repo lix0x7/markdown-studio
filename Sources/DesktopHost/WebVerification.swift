@@ -43,7 +43,46 @@ final class WebVerification {
         if attempts > 200 { fail("Frontend did not initialize"); return }
         host?.web.evaluateJavaScript("Boolean(window.editorAPI)") { [weak self] value, error in
             guard let self, self.timer != nil, value as? Bool == true else { return }
-            self.timer?.invalidate(); self.timer = nil; self.runEditorChecks()
+            self.timer?.invalidate(); self.timer = nil; self.runImageMoveChecks()
+        }
+    }
+    func runImageMoveChecks() {
+        let script = #"""
+        const ed=window.editorAPI.editor;
+        const pause=()=>new Promise(r=>setTimeout(r,100));
+        const image='<figure><img src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22/%3E" width="64" height="64" align="right"><figcaption>Move caption</figcaption></figure>';
+        const source='# Start\n\nBefore\n\n'+image+'\n\nAfter';
+        ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:source},selection:{anchor:0},scrollIntoView:true});
+        await pause();await pause();
+        // 使用真实 WKWebView 坐标和拖放事件，验证预览图片只移动一次且可整体撤销。
+        for(const at of [source.length,0]) {
+          const img=document.querySelector('.md-image img');
+          if(!img)throw new Error('Image move preview missing');
+          const point=ed.view.coordsAtPos(at);
+          if(!point)throw new Error('Image move target has no coordinates');
+          const data=new DataTransfer();
+          img.dispatchEvent(new DragEvent('dragstart',{dataTransfer:data,bubbles:true,cancelable:true}));
+          const drop=new DragEvent('drop',{dataTransfer:data,clientX:point.left,clientY:(point.top+point.bottom)/2,bubbles:true,cancelable:true});
+          ed.view.contentDOM.dispatchEvent(drop);
+          await pause();
+          const moved=ed.view.state.doc.toString();
+          if(!drop.defaultPrevented || moved.split(image).length!==2 || moved===source)throw new Error('Image drag copied or failed to move');
+          if(at===0 ? !moved.startsWith('\n\n'+image) : !moved.endsWith(image+'\n\n'))throw new Error('Image moved to wrong position');
+          ed.undo();await pause();
+          if(ed.view.state.doc.toString()!==source)throw new Error('Image move did not undo in one step');
+        }
+        ed.undo();
+        ed.view.dispatch({selection:{anchor:0},scrollIntoView:true});
+        return true;
+        """#
+        host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { result in
+            switch result {
+            case .failure(let error): self.fail("Image move: \(error)")
+            case .success:
+                print("PASS: Image drag moves source with caption and layout, without copies, and undoes in one step")
+                fflush(stdout)
+                self.runEditorChecks()
+            }
         }
     }
     func runEditorChecks() {

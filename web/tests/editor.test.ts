@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { SourceBuffer, parseTable, tablePatches } from "../src/source";
 import { MarkdownEditor } from "../src/editor";
+import { columnMarkup } from "../src/columns";
 import { isolateHistory } from "@codemirror/commands";
 const editors: MarkdownEditor[] = [];
 beforeAll(() => {
@@ -202,4 +203,79 @@ describe("unordered list presentation", () => {
     ed.toggle();
     expect(ed.view.dom.querySelectorAll(".md-bullet-mark")).toHaveLength(4);
   });
+});
+
+// jsdom 不做布局，固定落点；保留真实 DOM 事件、编辑事务、原文同步和撤销链路。
+function moveImage(source: HTMLElement, target: MarkdownEditor, at: number) {
+  const data = {
+    clearData() {},
+    setData() {},
+    effectAllowed: "",
+    dropEffect: "",
+  };
+  const start = new Event("dragstart", { bubbles: true, cancelable: true });
+  Object.defineProperty(start, "dataTransfer", { value: data });
+  source.dispatchEvent(start);
+  expect(data.effectAllowed).toBe("move");
+  target.view.posAtCoords = () => at;
+  const drop = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, "dataTransfer", { value: data });
+  target.view.contentDOM.dispatchEvent(drop);
+  expect(drop.defaultPrevented).toBe(true);
+}
+
+it("moves image source in both directions without copying and undoes in one step", () => {
+  for (const image of [
+    "![alt](fixture.png)",
+    '<figure><img src="data:image/png;base64,AAAA" width="128" height="64" align="right"><figcaption>说明</figcaption></figure>',
+  ]) {
+    const raw = "# Start\n\nBefore\n\n" + image + "\n\nAfter";
+    const { ed, disk } = create(raw);
+    for (const at of [raw.length, 0]) {
+      moveImage(ed.view.dom.querySelector(".md-image img")!, ed, at);
+      const moved = ed.view.state.doc.toString();
+      expect(moved.split(image)).toHaveLength(2);
+      expect(
+        at === 0
+          ? moved.startsWith("\n\n" + image)
+          : moved.endsWith(image + "\n\n"),
+      ).toBe(true);
+      expect(disk()).toBe(moved);
+      ed.undo();
+      expect(disk()).toBe(raw);
+      ed.redo();
+      expect(disk()).toBe(moved);
+      ed.undo();
+    }
+    moveImage(
+      ed.view.dom.querySelector(".md-image img")!,
+      ed,
+      raw.indexOf(image),
+    );
+    expect(disk()).toBe(raw);
+  }
+});
+
+it("moves an image between columns with a single document undo", async () => {
+  const image = "![alt](fixture.png)";
+  const raw =
+    "# Start\n\n" + columnMarkup(["# Left\n\n" + image, "# Right\n\nTarget"]);
+  const { ed, disk } = create(raw);
+  await Promise.resolve();
+  const panes = ed.view.dom.querySelectorAll<HTMLElement>(
+    ".column-pane .cm-content",
+  );
+  panes[1].focus();
+  const right = ed.active();
+  expect(right).not.toBe(ed);
+  moveImage(
+    ed.view.dom.querySelector(".md-image img")!,
+    right,
+    right.view.state.doc.length,
+  );
+  const moved = ed.view.state.doc.toString();
+  expect(moved.split(image)).toHaveLength(2);
+  expect(moved.indexOf(image)).toBeGreaterThan(moved.indexOf("Target"));
+  ed.undo();
+  expect(disk()).toBe(raw);
 });

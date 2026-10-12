@@ -83,6 +83,15 @@ export const renderHTML = (text: string): string => {
   );
 };
 const editorInstances = new WeakMap<EditorView, MarkdownEditor>();
+let draggedImage:
+  | {
+      editor: MarkdownEditor;
+      doc: EditorState["doc"];
+      from: number;
+      to: number;
+      text: string;
+    }
+  | undefined;
 type ColumnUI = {
   block: ColumnBlock;
   children: MarkdownEditor[];
@@ -421,6 +430,28 @@ class BlockWidget extends WidgetType {
     });
     if (this.kind === "image") {
       const img = el.querySelector("img")!;
+      img.draggable = true;
+      img.addEventListener("dragstart", (event) => {
+        if (!event.dataTransfer) return;
+        const origin = editorInstances.get(view)!.documentPosition(this.from);
+        draggedImage = {
+          ...origin,
+          doc: origin.editor.view.state.doc,
+          to: origin.from + this.text.length,
+          text: this.text,
+        };
+        event.dataTransfer.clearData();
+        event.dataTransfer.setData("text/plain", this.text);
+        event.dataTransfer.setData(
+          "application/x-markdown-studio-image",
+          "move",
+        );
+        event.dataTransfer.effectAllowed = "move";
+        event.stopPropagation();
+      });
+      img.addEventListener("dragend", () => {
+        draggedImage = undefined;
+      });
       const original = document.createElement("div");
       original.innerHTML = renderHTML(this.text);
       const source = original.querySelector("img")!;
@@ -1165,6 +1196,55 @@ export class MarkdownEditor {
       }),
     });
     editorInstances.set(this.view, this);
+    // 在浏览器及 CodeMirror 默认复制行为之前，按根文档坐标原子移动图片（包括跨分栏）。
+    this.view.dom.addEventListener(
+      "dragover",
+      (event) => {
+        if (!draggedImage) return;
+        event.preventDefault();
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      },
+      true,
+    );
+    this.view.dom.addEventListener(
+      "drop",
+      (event) => {
+        if (
+          !draggedImage ||
+          (event.target as Element).closest(".cm-editor") !== this.view.dom
+        )
+          return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const image = draggedImage;
+        draggedImage = undefined;
+        const pos = this.view.posAtCoords({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        if (pos === null) return;
+        const target = this.documentPosition(pos);
+        const root = target.editor;
+        if (root !== image.editor || root.view.state.doc !== image.doc) return;
+        if (target.from >= image.from && target.from <= image.to) return;
+        const insert = "\n\n" + image.text + "\n\n";
+        const changes = root.view.state.changes(
+          [
+            { from: image.from, to: image.to },
+            { from: target.from, insert },
+          ].sort((a, b) => a.from - b.from),
+        );
+        root.view.dispatch({
+          changes,
+          selection: { anchor: changes.mapPos(target.from, -1) },
+          annotations: isolateHistory.of("full"),
+          userEvent: "move.image",
+          scrollIntoView: true,
+        });
+        root.view.focus();
+      },
+      true,
+    );
     this.view.contentDOM.addEventListener("focus", () => {
       this.activeChild = undefined;
     });
@@ -1301,6 +1381,20 @@ export class MarkdownEditor {
     this.view.dom.classList.toggle("is-source", this.sourceMode);
     this.view.scrollDOM.scrollTop = top;
     this.view.focus();
+  }
+  // 将嵌套分栏内的位置映射到根文档，使跨栏移动共用一条撤销记录。
+  documentPosition(from: number): { editor: MarkdownEditor; from: number } {
+    const parent = this.parentEditor;
+    if (!parent) return { editor: this, from };
+    for (const el of parent.view.dom.querySelectorAll<HTMLElement>(
+      ".md-columns",
+    )) {
+      const ui = columnUIs.get(el)!;
+      const index = ui.children.indexOf(this);
+      if (index >= 0)
+        return parent.documentPosition(ui.block.columns[index].from + from);
+    }
+    throw new Error("Column editor is detached from its document");
   }
   jump(from: number) {
     this.view.dispatch({
