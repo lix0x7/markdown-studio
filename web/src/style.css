@@ -1321,3 +1321,34 @@ footer svg {
 .app[data-page-width="full"] {
   --page-width: 100%;
 }
+
+.md-image figure {
+  margin: 0;
+}
+.md-image figcaption {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.image-toolbar {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.image-caption-editor:not([hidden]) {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.image-caption-editor input {
+  min-width: 0;
+  flex: 1;
+  padding: 7px 10px;
+  color: var(--text);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+.image-caption-editor button {
+  padding: 6px 10px;
+}

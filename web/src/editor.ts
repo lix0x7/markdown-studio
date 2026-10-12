@@ -434,19 +434,24 @@ class BlockWidget extends WidgetType {
       const original = document.createElement("div");
       original.innerHTML = renderHTML(this.text);
       const source = original.querySelector("img")!;
+      let figure = original.querySelector("figure");
       const toolbar = document.createElement("div");
       toolbar.className = "image-toolbar";
       toolbar.setAttribute("role", "toolbar");
       toolbar.setAttribute("aria-label", "图片布局");
       // 只在操作完成后写回一次事务；标准 HTML 属性保留图片引用、对齐和尺寸。
       const commit = () => {
+        const caption = figure?.querySelector("figcaption");
+        if (caption)
+          caption.setAttribute("align", source.getAttribute("align") ?? "left");
         view.dispatch({
           changes: {
             from: this.from,
             to: this.from + this.text.length,
-            insert: source.outerHTML,
+            insert: figure?.outerHTML ?? source.outerHTML,
           },
-          userEvent: "input",
+          annotations: isolateHistory.of("full"),
+          userEvent: "input.image",
         });
         view.requestMeasure();
       };
@@ -472,7 +477,80 @@ class BlockWidget extends WidgetType {
         view.focus();
       };
       toolbar.append(edit);
-      el.append(toolbar);
+      const captionEditor = document.createElement("form");
+      captionEditor.className = "image-caption-editor";
+      captionEditor.hidden = true;
+      const captionInput = document.createElement("input");
+      captionInput.setAttribute("aria-label", "图片说明内容");
+      captionInput.placeholder = "输入图片说明，留空可移除";
+      captionInput.value =
+        figure?.querySelector("figcaption")?.textContent ?? "";
+      const saveCaption = document.createElement("button");
+      saveCaption.type = "submit";
+      saveCaption.textContent = "确定";
+      const cancelCaption = document.createElement("button");
+      cancelCaption.type = "button";
+      cancelCaption.textContent = "取消";
+      cancelCaption.onclick = () => {
+        captionEditor.hidden = true;
+        view.requestMeasure();
+      };
+      captionEditor.append(captionInput, saveCaption, cancelCaption);
+      captionEditor.onsubmit = (event) => {
+        event.preventDefault();
+        const text = captionInput.value.trim();
+        if (text) {
+          if (!figure) {
+            figure = document.createElement("figure");
+            figure.append(source);
+          }
+          let caption = figure.querySelector("figcaption");
+          if (!caption) {
+            caption = document.createElement("figcaption");
+            figure.append(caption);
+          }
+          caption.textContent = text;
+        } else {
+          figure = null;
+        }
+        commit();
+      };
+      captionEditor.onkeydown = (event) => {
+        event.stopPropagation();
+        if (event.key === "Escape") {
+          event.preventDefault();
+          captionEditor.hidden = true;
+          view.requestMeasure();
+        }
+      };
+      const captionButton = document.createElement("button");
+      captionButton.textContent = "图片说明";
+      captionButton.setAttribute("aria-label", "设置图片说明");
+      captionButton.onclick = () => {
+        captionInput.value =
+          figure?.querySelector("figcaption")?.textContent ?? "";
+        captionEditor.hidden = false;
+        captionInput.focus();
+        view.requestMeasure();
+      };
+      const remove = document.createElement("button");
+      remove.textContent = "删除";
+      remove.setAttribute("aria-label", "删除图片");
+      remove.onclick = () => {
+        view.dispatch({
+          changes: {
+            from: this.from,
+            to: this.from + this.text.length,
+            insert: "",
+          },
+          selection: { anchor: this.from },
+          annotations: isolateHistory.of("full"),
+          userEvent: "delete.image",
+        });
+        view.focus();
+      };
+      toolbar.append(captionButton, remove);
+      el.append(toolbar, captionEditor);
       const handle = document.createElement("button");
       handle.className = "image-resize";
       handle.setAttribute("aria-label", "锁定比例调整图片大小");
@@ -603,7 +681,9 @@ function buildDecorations(
       if (
         name === "Image" ||
         (name === "HTMLBlock" &&
-          /^<img\b[^>]*>\s*$/.test(state.sliceDoc(from, to)))
+          /^(?:<img\b[^>]*>|<figure>\s*<img\b[^>]*>\s*<figcaption(?:\s[^>]*)?>[^]*?<\/figcaption>\s*<\/figure>)\s*$/.test(
+            state.sliceDoc(from, to),
+          ))
       ) {
         if (name === "HTMLBlock") to = state.doc.lineAt(from).to;
         const l = state.doc.lineAt(from);
