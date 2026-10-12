@@ -311,7 +311,7 @@ export default function App() {
       }
       return;
     }
-    if (table && !["save", "saveAs"].includes(name)) {
+    if (table && !["save", "saveAs", "openExternal"].includes(name)) {
       if (name === "undo" || name === "redo")
         window.dispatchEvent(
           new CustomEvent("table-command", { detail: name }),
@@ -372,6 +372,18 @@ export default function App() {
             });
         };
         picker.click();
+        return;
+      }
+      if (name === "openExternal") {
+        if (!isNative) return;
+        setBusy(true);
+        const meta = await request<Partial<DocumentInfo> | null>(
+          "openExternal",
+        );
+        if (meta) {
+          setDoc((d) => ({ ...d, ...meta }));
+          setNotice("已在外部应用打开");
+        }
         return;
       }
       if (name === "save" || name === "saveAs") {
@@ -951,6 +963,15 @@ export default function App() {
                   <Menu.Item onSelect={() => void command("saveAs")}>
                     另存为<kbd>⇧⌘S</kbd>
                   </Menu.Item>
+                  {isNative && (
+                    <Menu.Item
+                      disabled={busy}
+                      onSelect={() => void command("openExternal")}
+                    >
+                      外部应用打开…
+                      <ArrowSquareOut />
+                    </Menu.Item>
+                  )}
                 </Menu.Content>
               </Menu.Portal>
             </Menu.Root>

@@ -15,6 +15,25 @@ final class WebVerification {
     func start() {
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            // 外部打开必须先落盘最新内容，保留编码；干净文档不覆盖其他应用的修改。
+            do {
+                let file = root.appendingPathComponent("external-open.md")
+                let initial = SourceFile(text: "# 外部打开\r\n", encoding: .utf8BOM)
+                try initial.data.write(to: file)
+                let external = try Host(url: file, recovery: RecoveryStore(directory: root.appendingPathComponent("ExternalRecovery")))
+                defer { external.close() }
+                external.source.text += "当前修改\r\n"
+                guard external.prepareExternalDocument() == file,
+                      try Data(contentsOf: file) == external.source.data,
+                      !external.dirty else { fail("External open did not save latest source with original encoding"); return }
+                let changed = Data("Externally changed".utf8)
+                try changed.write(to: file)
+                guard external.prepareExternalDocument() == file,
+                      try Data(contentsOf: file) == changed else { fail("External open overwrote clean document changed on disk"); return }
+                print("PASS: External open saves current edits, preserves encoding and leaves external disk changes intact")
+                fflush(stdout)
+            }
+            if CommandLine.arguments.contains("--external-open-only") { exit(0) }
             let file = root.appendingPathComponent("roundtrip.md")
             try SourceFile(text: original, encoding: .utf8BOM).data.write(to: file)
             host = try Host(url: file, recovery: RecoveryStore(directory: root.appendingPathComponent("Recovery")))

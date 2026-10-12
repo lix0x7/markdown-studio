@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         file.addItem(.separator())
         item(file, "保存", "s", command: "save"); item(file, "另存为…", "s", [.command, .shift], command: "saveAs")
         item(file, "从磁盘重新载入…", command: "reload")
+        item(file, "外部应用打开…", command: "openExternal")
         file.addItem(.separator()); item(file, "导出 HTML…", command: "exportHTML"); item(file, "导出 PDF…", "e", [.command, .shift], command: "exportPDF")
         file.addItem(.separator()); item(file, "关闭窗口", "w", action: #selector(NSWindow.performClose(_:)))
         let edit = submenu("编辑")

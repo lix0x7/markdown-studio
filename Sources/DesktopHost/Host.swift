@@ -94,6 +94,34 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
                 draftWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
                 result = ["dirty": dirty]
             case "save", "saveAs": result = save(as: action == "saveAs") ? metadata() : NSNull()
+            case "openExternal":
+                let panel = NSOpenPanel()
+                panel.title = "外部应用打开"
+                panel.message = "选择打开当前 Markdown 文档的应用；打开前会保存当前修改。"
+                panel.prompt = "打开"
+                panel.allowedContentTypes = [.applicationBundle]
+                panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+                panel.canChooseDirectories = false
+                guard panel.runModal() == .OK, let application = panel.url else { reply(id, NSNull()); return }
+                guard Bundle(url: application)?.bundleIdentifier != Bundle.main.bundleIdentifier else { throw Self.error("请选择 Markdown Studio 以外的应用。") }
+                guard let document = prepareExternalDocument() else { reply(id, NSNull()); return }
+                event("metadata", metadata())
+                let started = Date()
+                NSLog("Open external document started: document=%@ application=%@", document.path, application.path)
+                NSWorkspace.shared.open([document], withApplicationAt: application, configuration: NSWorkspace.OpenConfiguration()) { [weak self] _, error in
+                    DispatchQueue.main.async {
+                        guard let self else { return }
+                        let elapsed = Date().timeIntervalSince(started)
+                        if let error {
+                            NSLog("Open external document failed: document=%@ application=%@ elapsed=%.3f error=%@", document.path, application.path, elapsed, error.localizedDescription)
+                            self.reply(id, NSNull(), error: "无法用所选应用打开文档：" + error.localizedDescription)
+                            return
+                        }
+                        NSLog("Open external document completed: document=%@ application=%@ elapsed=%.3f", document.path, application.path, elapsed)
+                        self.reply(id, self.metadata())
+                    }
+                }
+                return
             case "new": onNew?(); result = NSNull()
             case "open": onOpen?(); result = NSNull()
             case "openDroppedDocuments":
@@ -169,6 +197,16 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
         let filename = "image-\(UUID().uuidString.prefix(8)).\(ext)"
         try bytes.write(to: directory.appendingPathComponent(filename), options: .atomic)
         return filename
+    }
+    // 外部应用读取同一份磁盘文件；保存取消或冲突未解决时不继续打开。
+    func prepareExternalDocument() -> URL? {
+        if (url == nil || dirty) && !save() { return nil }
+        guard let url else { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            event("error", "原文件已移动或删除，请先另存为。")
+            return nil
+        }
+        return url
     }
     // 保存基于磁盘字节基线；外部冲突必须由用户选择，不静默覆盖。
     func save(as saveAs: Bool = false) -> Bool {
