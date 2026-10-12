@@ -61,6 +61,7 @@ export const renderHTML = (text: string) =>
     { FORBID_TAGS: ["style", "script", "iframe"], FORBID_ATTR: ["style"] },
   );
 class BlockWidget extends WidgetType {
+  private tableObservers = new WeakMap<HTMLElement, ResizeObserver>();
   constructor(
     readonly text: string,
     readonly kind: string,
@@ -88,6 +89,24 @@ class BlockWidget extends WidgetType {
       scroll.setAttribute("aria-label", "表格，可左右滚动");
       scroll.append(...Array.from(el.childNodes));
       el.append(scroll);
+      // 按内容自然宽度判断是否需要突破正文栏，避免小表格被拉满屏幕。
+      const table = scroll.querySelector("table")!;
+      const observer = new ResizeObserver(() => {
+        const content = view.contentDOM;
+        const style = getComputedStyle(content);
+        const available = content.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        table.style.minWidth = "0";
+        const naturalWidth = table.getBoundingClientRect().width;
+        table.style.minWidth = "";
+        const wide = naturalWidth > available + 1;
+        if (el.classList.contains("md-table-wide") !== wide) {
+          el.classList.toggle("md-table-wide", wide);
+          view.requestMeasure();
+        }
+      });
+      observer.observe(view.contentDOM);
+      observer.observe(table);
+      this.tableObservers.set(el, observer);
       const button = document.createElement("button");
       button.className = "table-edit";
       button.textContent = "编辑表格";
@@ -219,6 +238,9 @@ class BlockWidget extends WidgetType {
       };
     }
     return el;
+  }
+  destroy(dom: HTMLElement) {
+    this.tableObservers.get(dom)?.disconnect();
   }
   ignoreEvent() {
     return true;

@@ -500,7 +500,7 @@ main {
   padding: 12px 0 18px;
 }
 /* 表格展示区铺满编辑区；只突破横向正文边界，不改变块高度计量。 */
-.md-table {
+.md-table-wide {
   width: calc(100cqw - 48px);
   margin-left: calc((100% - 100cqw + 48px) / 2);
 }

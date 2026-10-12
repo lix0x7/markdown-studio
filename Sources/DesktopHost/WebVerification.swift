@@ -81,6 +81,11 @@ final class WebVerification {
         check(window.getSelection().toString()===expected,'Source mode retains native selected text');
         ed.toggle();ed.undo();check(ed.buffer.raw===saved,'Selection checks do not change saved source');
         // 用真实布局验证横向滚动和超长文本的宽度上限。
+        const compactTable=document.querySelector('.md-table');
+        const contentStyle=getComputedStyle(ed.view.contentDOM);
+        const readingWidth=ed.view.contentDOM.clientWidth-parseFloat(contentStyle.paddingLeft)-parseFloat(contentStyle.paddingRight);
+        check(!!compactTable && !compactTable.classList.contains('md-table-wide'),'Small table stays in the reading column');
+        check(Math.abs(compactTable.getBoundingClientRect().width-readingWidth)<2,'Small table width matches surrounding paragraphs');
         const wideFixture='\n\n| Alpha | Beta | Gamma |\n| --- | --- | --- |\n| '+('unbroken'.repeat(180))+' | '+('中文内容'.repeat(80))+' | tail |\n\n';
         const wideEnd=ed.view.state.doc.length;
         ed.view.dispatch({changes:{from:wideEnd,insert:wideFixture},selection:{anchor:0},userEvent:'input'});
