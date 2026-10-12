@@ -272,7 +272,72 @@ final class WebVerification {
             case .failure(let error): self.fail(String(describing: (error as NSError).userInfo))
             case .success(let stats):
                 print("PERFORMANCE: \(stats)"); fflush(stdout)
-                self.images()
+                self.columns()
+            }
+        }
+    }
+    func columns() {
+        let script = #"""
+        const api=window.editorAPI, ed=api.editor;
+        // 性能测试使用独立编辑器写入宿主，恢复主编辑器对应的原生文本基线。
+        const nativeBefore=await api.request('ready');
+        await api.request('change',{patches:[{from:0,to:nativeBefore.text.length,insert:ed.buffer.raw}]});
+        const pause=()=>new Promise(r=>setTimeout(r,100));
+        const source='# Before\n\n<div class="columns" data-ratios="2,1,1">\n<md>\n# Left\n\nleft text\n</md>\n<md>\n## Middle\n\n| A | B |\n| --- | --- |\n| x | y |\n</md>\n<md>\n## Right\n\nright text\n</md>\n</div>\n\nAfter';
+        ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:source},selection:{anchor:0},scrollIntoView:true});await pause();await pause();
+        let panes=[...document.querySelectorAll('.column-pane')];
+        if(panes.length!==3)throw new Error('Three column editors did not mount');
+        const widths=panes.map(p=>p.getBoundingClientRect().width);
+        if(Math.abs(widths[0]/widths[1]-2)>0.1)throw new Error('Initial column ratio incorrect');
+        panes[0].querySelector('.cm-content').focus();
+        const child=ed.active();
+        if(child===ed)throw new Error('Active column routing failed');
+        child.view.dispatch({changes:{from:child.view.state.doc.length,insert:'追加内容\n'},userEvent:'input'});await pause();
+        if(!ed.buffer.raw.includes('追加内容') || (await api.request('ready')).text!==ed.buffer.raw)throw new Error('Column edits did not sync to native document');
+        if(panes[0]!==document.querySelector('.column-pane'))throw new Error('Typing replaced active column DOM');
+        ed.undo();await pause();
+        if(ed.view.state.doc.toString()!==source)throw new Error('Column undo did not restore source: '+ed.view.state.doc.toString().slice(0,80));
+        const divider=document.querySelector('.column-divider');
+        divider.setPointerCapture=()=>{};divider.releasePointerCapture=()=>{};
+        divider.dispatchEvent(new PointerEvent('pointerdown',{clientX:300,button:0,pointerId:1,bubbles:true}));
+        divider.dispatchEvent(new PointerEvent('pointermove',{clientX:340,pointerId:1,bubbles:true}));
+        divider.dispatchEvent(new PointerEvent('pointerup',{clientX:340,pointerId:1,bubbles:true}));await pause();
+        const ratios=/data-ratios="([^"]+)"/.exec(ed.buffer.raw)[1].split(',').map(Number);
+        if(ratios[0]<=2 || ratios[1]>=1 || ratios[2]!==1 || Math.abs(ratios[0]+ratios[1]-3)>0.00001)throw new Error('Drag did not preserve adjacent pair total and third column');
+        if(!ed.buffer.raw.includes('right text'))throw new Error('Resize changed column content');
+        ed.undo();await pause();if(ed.view.state.doc.toString()!==source)throw new Error('Ratio drag undo failed');
+        panes=[...document.querySelectorAll('.column-pane')];panes[1].querySelector('.cm-content').focus();
+        const middle=ed.active();middle.view.dispatch({selection:{anchor:middle.view.state.doc.toString().indexOf('| A')+2}});
+        api.command('table');await pause();await pause();
+        const cell=document.querySelector('input[aria-label="当前单元格内容"]');
+        cell.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(cell,'Nested');cell.dispatchEvent(new Event('input',{bubbles:true}));cell.blur();await pause();
+        if(!ed.buffer.raw.includes('| Nested | B |'))throw new Error('Column table changes targeted the wrong editor');
+        document.querySelector('[aria-label="关闭表格编辑器"]').click();await pause();
+        ed.undo();await pause();if(ed.view.state.doc.toString()!==source)throw new Error('Column table undo failed');
+        [...document.querySelectorAll('.columns-toolbar button')].find(b=>b.textContent==='添加分栏').click();await pause();await pause();
+        if(document.querySelectorAll('.column-pane').length!==4)throw new Error('Add column failed');
+        ed.undo();await pause();await pause();
+        [...document.querySelectorAll('.columns-toolbar button')].find(b=>b.textContent==='取消分栏').click();await pause();
+        if(ed.buffer.raw.includes('<md>') || !ed.buffer.raw.includes('left text') || !ed.buffer.raw.includes('right text'))throw new Error('Unwrap columns lost content');
+        ed.undo();await pause();await pause();
+        ed.jump(ed.view.state.doc.toString().indexOf('## Right'));await pause();
+        if(ed.active()===ed || !ed.active().view.state.doc.toString().includes('right text'))throw new Error('Outline did not focus column editor');
+        const nested='<div class="columns">\n<md>\nInner A\n</md>\n<md>\nInner B\n</md>\n</div>';
+        const nestedSource=source.replace('left text',nested);
+        ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:nestedSource},selection:{anchor:0},scrollIntoView:true});await pause();await pause();
+        if(document.querySelectorAll('.column-pane').length!==5)throw new Error('Nested columns did not mount');
+        document.querySelector('.column-pane .column-pane .cm-content').focus();
+        const inner=ed.active();inner.view.dispatch({changes:{from:inner.view.state.doc.length,insert:' nested edit'}});await pause();await pause();
+        if(!ed.buffer.raw.includes('Inner A nested edit') || (await api.request('ready')).text!==ed.buffer.raw)throw new Error('Nested column edit did not sync');
+        ed.undo();await pause();await pause();
+        if(ed.view.state.doc.toString()!==nestedSource)throw new Error('Nested column undo failed');
+        return 'Three columns, nested editing, native sync, stable DOM, adjacent resizing, outline, add, unwrap and undo';
+        """#
+        host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .failure(let error): self.fail(String(describing: (error as NSError).userInfo))
+            case .success(let value): print("PASS: \(value)"); self.images()
             }
         }
     }

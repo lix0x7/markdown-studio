@@ -3,6 +3,7 @@ import {
   undo as undoTableChange,
   redo as redoTableChange,
 } from "@codemirror/commands";
+import { columnMarkup } from "./columns";
 import TableDrawer from "./TableDrawer";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -114,6 +115,9 @@ export default function App() {
     [count, setCount] = useState(0),
     [empty, setEmpty] = useState(true),
     [active, setActive] = useState(0);
+  const [columnsDialog, setColumnsDialog] = useState(false);
+  const [columnCount, setColumnCount] = useState(2);
+  const tableOwner = useRef<MarkdownEditor | null>(null);
   const [settings, setSettings] = useState(false);
   const [imagePasteMode, setImagePasteMode] = useState("directory");
   const [sidebarWidth, setSidebarWidth] = useState(228);
@@ -233,10 +237,11 @@ export default function App() {
     if (data.recovered) setNotice("已恢复未保存草稿，请检查后保存。");
   };
   const openTable = (model: TableModel) => {
+    tableOwner.current = editor.current?.active() ?? null;
     setTable(model);
   };
   async function importImages(files: File[]) {
-    const ed = editor.current;
+    const ed = editor.current?.active();
     if (!ed) return;
     try {
       setBusy(true);
@@ -290,9 +295,15 @@ export default function App() {
       return;
     }
 
-    const ed = editor.current;
+    const ed = ["mode", "exportHTML", "exportPDF", "find"].includes(name)
+      ? editor.current
+      : editor.current?.active();
     if (!ed) return;
     try {
+      if (name === "columns") {
+        setColumnsDialog(true);
+        return;
+      }
       if (name === "new" || name === "open") {
         if (isNative) {
           await request(name);
@@ -535,7 +546,7 @@ export default function App() {
   }, [notice]);
   function submitModal(e: React.FormEvent) {
     e.preventDefault();
-    const ed = editor.current;
+    const ed = editor.current?.active();
     if (!ed) return;
     const t = target.current;
     if (modal === "link") {
@@ -804,6 +815,9 @@ export default function App() {
             <Tool label="插入或编辑表格" onClick={() => void command("table")}>
               <Table />
             </Tool>
+            <Tool label="插入分栏" onClick={() => void command("columns")}>
+              <span>分栏</span>
+            </Tool>
             <Tool label="代码块与语言" onClick={() => void command("code")}>
               <Code />
             </Tool>
@@ -996,6 +1010,54 @@ export default function App() {
           </form>
         </Modal>
       )}
+      {columnsDialog && (
+        <Modal
+          title="插入分栏"
+          description="每栏可编辑 Markdown，拖动分隔线调整相邻栏比例。"
+          close={() => setColumnsDialog(false)}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const ed = editor.current?.active();
+              if (!ed) return;
+              const selected = ed.view.state.selection.main;
+              const contents = Array.from({ length: columnCount }, (_, i) =>
+                i === 0
+                  ? ed.view.state.sliceDoc(selected.from, selected.to)
+                  : "",
+              );
+              ed.apply([
+                {
+                  from: selected.from,
+                  to: selected.to,
+                  insert: "\n\n" + columnMarkup(contents) + "\n\n",
+                },
+              ]);
+              setColumnsDialog(false);
+            }}
+          >
+            <label className="settings-field">
+              分栏数量
+              <input
+                aria-label="分栏数量"
+                type="number"
+                min="2"
+                max="12"
+                value={columnCount}
+                onChange={(e) =>
+                  setColumnCount(
+                    Math.max(2, Math.min(12, Number(e.target.value) || 2)),
+                  )
+                }
+              />
+            </label>
+            <button className="primary" type="submit">
+              插入分栏
+            </button>
+          </form>
+        </Modal>
+      )}
       {settings && (
         <Modal
           title="全局设置"
@@ -1030,7 +1092,7 @@ export default function App() {
           table={table}
           close={() => setTable(null)}
           onChange={(rows, aligns, action) => {
-            const ed = editor.current;
+            const ed = tableOwner.current;
             const session = tableSync.current;
             if (!ed || !session) return false;
             const current = session.current;
@@ -1063,4 +1125,4 @@ export default function App() {
     </div>
   );
 }
-const exportCSS = `body{font:16px/1.8 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#25282b;margin:40px auto;max-width:760px;padding:0 24px;overflow-wrap:anywhere}h1,h2,h3{line-height:1.4;break-after:avoid}h1{font-size:32px}h2{font-size:24px}blockquote{margin:24px 0;padding:4px 20px;border-left:3px solid #a5b5ab;color:#596760}pre{background:#f4f5f4;padding:20px;white-space:pre-wrap;border-radius:8px}code{font:13px/1.7 Menlo,monospace}table{border-collapse:collapse;width:100%;margin:24px 0}td,th{border:1px solid #ddd;padding:10px 14px;text-align:left}th{background:#f6f7f6}[align=right]{text-align:right}[align=center]{text-align:center}img{max-width:100%;height:auto}img[align]{display:block;float:none}img[align=center]{margin-inline:auto}img[align=right]{margin-left:auto}a{color:#3c6b54}tr,img{break-inside:avoid}@media print{body{margin:0;max-width:none;padding:0}}`;
+const exportCSS = `body{font:16px/1.8 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#25282b;margin:40px auto;max-width:760px;padding:0 24px;overflow-wrap:anywhere}h1,h2,h3{line-height:1.4;break-after:avoid}h1{font-size:32px}h2{font-size:24px}blockquote{margin:24px 0;padding:4px 20px;border-left:3px solid #a5b5ab;color:#596760}pre{background:#f4f5f4;padding:20px;white-space:pre-wrap;border-radius:8px}code{font:13px/1.7 Menlo,monospace}table{border-collapse:collapse;width:100%;margin:24px 0}td,th{border:1px solid #ddd;padding:10px 14px;text-align:left}th{background:#f6f7f6}[align=right]{text-align:right}[align=center]{text-align:center}.columns-render{margin:20px 0}.columns-render>section{min-width:0;overflow-wrap:anywhere}.columns-render table{display:block;overflow:auto}.columns-render pre{overflow:auto}img{max-width:100%;height:auto}img[align]{display:block;float:none}img[align=center]{margin-inline:auto}img[align=right]{margin-left:auto}a{color:#3c6b54}tr,img{break-inside:avoid}@media print{body{margin:0;max-width:none;padding:0}}`;

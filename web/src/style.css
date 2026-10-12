@@ -1241,3 +1241,75 @@ footer svg {
 .md-image:focus-within .image-resize {
   opacity: 1;
 }
+
+.md-columns {
+  position: relative;
+  padding: 30px 0 20px;
+}
+.columns-grid {
+  display: grid;
+  align-items: stretch;
+}
+.column-pane {
+  min-width: 0;
+  height: auto;
+  container-type: inline-size;
+}
+.column-pane > .cm-editor {
+  height: auto;
+  min-height: 100px;
+  font-size: 15px;
+}
+.column-pane .cm-scroller {
+  overflow: hidden !important;
+}
+.column-pane .cm-editor .cm-content {
+  padding: 8px 12px 24px !important;
+  max-width: none;
+  flex-basis: 100% !important;
+}
+.column-pane .md-table-wide {
+  width: 100%;
+  margin-left: 0;
+}
+.column-pane .md-table table {
+  max-width: 200cqw;
+}
+.column-divider {
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    transparent 4px,
+    var(--line) 4px,
+    var(--line) 6px,
+    transparent 6px
+  );
+  cursor: col-resize;
+  touch-action: none;
+}
+.column-divider:hover,
+.column-divider:focus-visible {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.columns-toolbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+}
+.md-columns:hover > .columns-toolbar,
+.md-columns:focus-within > .columns-toolbar {
+  opacity: 1;
+}
+.columns-toolbar button {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+}

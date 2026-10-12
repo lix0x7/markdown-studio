@@ -1,5 +1,6 @@
 import {
   EditorState,
+  Transaction,
   StateField,
   StateEffect,
   Compartment,
@@ -23,6 +24,7 @@ import {
   undo,
   redo,
   invertedEffects,
+  isolateHistory,
 } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { javascript } from "@codemirror/lang-javascript";
@@ -47,20 +49,282 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import {
   SourceBuffer,
+  minimalPatch,
   parseTable,
   type Patch,
   type TableModel,
 } from "./source";
 import { request } from "./bridge";
+import { parseColumns, columnMarkup, type ColumnBlock } from "./columns";
 import { clipboardTable } from "./clipboard-table";
 
 export const mode = new Compartment();
 const viewport = StateEffect.define<{ from: number; to: number }>();
-export const renderHTML = (text: string) =>
-  DOMPurify.sanitize(
+export const renderHTML = (text: string): string => {
+  const blocks = parseColumns(text);
+  if (blocks.length) {
+    let at = 0,
+      html = "";
+    for (const block of blocks) {
+      html += renderHTML(text.slice(at, block.from));
+      html +=
+        `<div class="columns-render" style="display:grid;gap:24px;grid-template-columns:${block.ratios.map((n) => `minmax(0,${n}fr)`).join(" ")}">` +
+        block.columns
+          .map((c) => `<section>${renderHTML(c.text)}</section>`)
+          .join("") +
+        "</div>";
+      at = block.to;
+    }
+    return html + renderHTML(text.slice(at));
+  }
+  return DOMPurify.sanitize(
     marked.parse(text, { async: false, gfm: true }) as string,
     { FORBID_TAGS: ["style", "script", "iframe"], FORBID_ATTR: ["style"] },
   );
+};
+const editorInstances = new WeakMap<EditorView, MarkdownEditor>();
+type ColumnUI = {
+  block: ColumnBlock;
+  children: MarkdownEditor[];
+  syncing: boolean;
+  disposed: boolean;
+  observer: ResizeObserver;
+  refresh: () => void;
+};
+const columnUIs = new WeakMap<HTMLElement, ColumnUI>();
+class ColumnsWidget extends WidgetType {
+  constructor(readonly block: ColumnBlock) {
+    super();
+  }
+  eq(other: ColumnsWidget) {
+    return (
+      this.block.from === other.block.from &&
+      this.block.original === other.block.original
+    );
+  }
+  toDOM(view: EditorView) {
+    const el = document.createElement("div");
+    el.className = "md-columns";
+    const grid = document.createElement("div");
+    grid.className = "columns-grid";
+    const toolbar = document.createElement("div");
+    toolbar.className = "columns-toolbar";
+    el.append(toolbar, grid);
+    const observer = new ResizeObserver(() => view.requestMeasure());
+    observer.observe(el);
+    const ui: ColumnUI = {
+      block: this.block,
+      children: [],
+      syncing: false,
+      disposed: false,
+      observer,
+      refresh: () => {},
+    };
+    columnUIs.set(el, ui);
+    const replace = (text: string) =>
+      view.dispatch({
+        changes: { from: ui.block.from, to: ui.block.to, insert: text },
+        annotations: isolateHistory.of("full"),
+        userEvent: "input.columns",
+      });
+    const add = document.createElement("button");
+    add.textContent = "添加分栏";
+    add.onclick = () =>
+      replace(
+        columnMarkup(
+          [...ui.block.columns.map((c) => c.text), "\n"],
+          [...ui.block.ratios, 1],
+        ),
+      );
+    const flatten = document.createElement("button");
+    flatten.textContent = "取消分栏";
+    flatten.onclick = () =>
+      replace(ui.block.columns.map((c) => c.text).join("\n"));
+    toolbar.append(add, flatten);
+    const separators: HTMLButtonElement[] = [];
+    ui.refresh = () => {
+      grid.style.gridTemplateColumns = ui.block.ratios
+        .map((r) => `minmax(0, ${r}fr)`)
+        .join(" 10px ");
+      separators.forEach((button, i) =>
+        button.setAttribute(
+          "aria-valuenow",
+          String(
+            Math.round(
+              (ui.block.ratios[i] /
+                (ui.block.ratios[i] + ui.block.ratios[i + 1])) *
+                100,
+            ),
+          ),
+        ),
+      );
+    };
+    this.block.columns.forEach((_, i) => {
+      if (i) {
+        const divider = document.createElement("button");
+        divider.className = "column-divider";
+        divider.setAttribute("role", "separator");
+        divider.setAttribute("aria-label", `调整第 ${i}、${i + 1} 栏比例`);
+        divider.setAttribute("aria-orientation", "vertical");
+        divider.setAttribute("aria-valuemin", "1");
+        divider.setAttribute("aria-valuemax", "99");
+        let drag: {
+          x: number;
+          left: number;
+          right: number;
+          pixels: number;
+        } | null = null;
+        const commit = (ratios: number[]) => {
+          const opening = view.state.sliceDoc(ui.block.from, ui.block.openEnd);
+          const next = /data-ratios=["'][^"']*["']/.test(opening)
+            ? opening.replace(
+                /data-ratios=["'][^"']*["']/,
+                `data-ratios="${ratios.join(",")}"`,
+              )
+            : opening.replace(/>$/, ` data-ratios="${ratios.join(",")}">`);
+          view.dispatch({
+            changes: {
+              from: ui.block.from,
+              to: ui.block.openEnd,
+              insert: next,
+            },
+            annotations: isolateHistory.of("full"),
+            userEvent: "input.columns",
+          });
+        };
+        divider.onpointerdown = (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          const panes = grid.querySelectorAll<HTMLElement>(
+            ":scope > .column-pane",
+          );
+          drag = {
+            x: e.clientX,
+            left: ui.block.ratios[i - 1],
+            right: ui.block.ratios[i],
+            pixels: panes[i - 1].clientWidth + panes[i].clientWidth,
+          };
+          divider.setPointerCapture(e.pointerId);
+        };
+        let ratios: number[] = [];
+        divider.onpointermove = (e) => {
+          if (!drag) return;
+          const total = drag.left + drag.right;
+          const left = Math.max(
+            total * 0.01,
+            Math.min(
+              total * 0.99,
+              drag.left + ((e.clientX - drag.x) / drag.pixels) * total,
+            ),
+          );
+          ratios = [...ui.block.ratios];
+          ratios[i - 1] = Number(left.toFixed(6));
+          ratios[i] = Number((total - left).toFixed(6));
+          grid.style.gridTemplateColumns = ratios
+            .map((r) => `minmax(0, ${r}fr)`)
+            .join(" 10px ");
+        };
+        divider.onpointerup = (e) => {
+          if (!drag) return;
+          drag = null;
+          divider.releasePointerCapture(e.pointerId);
+          if (ratios.length) commit(ratios);
+          ratios = [];
+        };
+        divider.onpointercancel = () => {
+          drag = null;
+          ratios = [];
+          ui.refresh();
+        };
+        divider.onkeydown = (e) => {
+          if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+          e.preventDefault();
+          const values = [...ui.block.ratios],
+            total = values[i - 1] + values[i];
+          values[i - 1] = Math.max(
+            total * 0.01,
+            Math.min(
+              total * 0.99,
+              values[i - 1] + (e.key === "ArrowRight" ? 1 : -1) * total * 0.02,
+            ),
+          );
+          values[i] = total - values[i - 1];
+          commit(values);
+        };
+        separators.push(divider);
+        grid.append(divider);
+      }
+      const pane = document.createElement("div");
+      pane.className = "column-pane editor-host";
+      grid.append(pane);
+    });
+    ui.refresh();
+    // 子编辑器挂载后复用稳定实例，输入只映射内容区间，不重建 DOM 或打断输入法。
+    queueMicrotask(() => {
+      if (ui.disposed) return;
+      const owner = editorInstances.get(view)!;
+      const panes = grid.querySelectorAll<HTMLElement>(":scope > .column-pane");
+      ui.block.columns.forEach((column, i) => {
+        const child = new MarkdownEditor(panes[i], column.text, {
+          ...owner.callbacks,
+          outline: () => {},
+          change: () => {
+            if (ui.syncing) return;
+            queueMicrotask(() => {
+              if (ui.disposed) return;
+              const model = ui.block.columns[i];
+              const text = child.view.state.doc.toString();
+              const patch = minimalPatch(model.text, text, model.from);
+              if (patch)
+                view.dispatch({
+                  changes: patch,
+                  annotations: isolateHistory.of("full"),
+                  userEvent: "input.columns",
+                });
+            });
+          },
+        });
+        child.parentEditor = owner;
+        panes[i].addEventListener("focusin", () => {
+          owner.activeChild = child;
+        });
+        ui.children.push(child);
+      });
+      view.requestMeasure();
+    });
+    return el;
+  }
+  updateDOM(el: HTMLElement) {
+    const ui = columnUIs.get(el)!;
+    if (ui.block.columns.length !== this.block.columns.length) return false;
+    ui.block = this.block;
+    ui.refresh();
+    ui.syncing = true;
+    ui.children.forEach((child, i) => {
+      const patch = minimalPatch(
+        child.view.state.doc.toString(),
+        this.block.columns[i].text,
+      );
+      if (patch)
+        child.view.dispatch({
+          changes: patch,
+          annotations: Transaction.addToHistory.of(false),
+        });
+    });
+    ui.syncing = false;
+    return true;
+  }
+  destroy(el: HTMLElement) {
+    const ui = columnUIs.get(el);
+    if (!ui) return;
+    ui.disposed = true;
+    ui.observer.disconnect();
+    ui.children.forEach((c) => c.destroy());
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
 class BlockWidget extends WidgetType {
   private tableObservers = new WeakMap<HTMLElement, ResizeObserver>();
   constructor(
@@ -256,6 +520,15 @@ function buildDecorations(
   range: { from: number; to: number },
 ): DecorationSet {
   const out: Range<Decoration>[] = [];
+  const columns = parseColumns(state.doc.toString());
+  for (const block of columns)
+    if (block.to >= range.from && block.from <= range.to)
+      out.push(
+        Decoration.replace({
+          widget: new ColumnsWidget(block),
+          block: true,
+        }).range(block.from, block.to),
+      );
   const seen = new Set<string>();
   const active = state.selection.main;
   const first = state.doc.lineAt(active.from).from,
@@ -282,6 +555,8 @@ function buildDecorations(
       const name = n.name,
         from = n.from;
       let to = n.to;
+      if (columns.some((block) => from >= block.from && from < block.to))
+        return false;
       if (name === "Table") {
         if (!editing(from, to)) {
           out.push(
@@ -442,6 +717,13 @@ export type EditorCallbacks = {
   image: (files: File[]) => void;
 };
 export class MarkdownEditor {
+  parentEditor?: MarkdownEditor;
+  activeChild?: MarkdownEditor;
+  active(): MarkdownEditor {
+    return this.activeChild?.view.dom.isConnected
+      ? this.activeChild.active()
+      : this;
+  }
   view: EditorView;
   buffer: SourceBuffer;
   sourceMode = false;
@@ -558,6 +840,20 @@ export class MarkdownEditor {
               run: () => this.prefix("#".repeat(i + 1) + " "),
             })),
             ...searchKeymap,
+            {
+              key: "Mod-z",
+              run: () => {
+                this.undo();
+                return true;
+              },
+            },
+            {
+              key: "Mod-Shift-z",
+              run: () => {
+                this.redo();
+                return true;
+              },
+            },
             ...historyKeymap,
             ...defaultKeymap,
             indentWithTab,
@@ -723,10 +1019,17 @@ export class MarkdownEditor {
         ],
       }),
     });
-    this.view.dom.addEventListener("edit-table", (event) =>
-      callbacks.table((event as CustomEvent).detail),
-    );
+    editorInstances.set(this.view, this);
+    this.view.contentDOM.addEventListener("focus", () => {
+      this.activeChild = undefined;
+    });
+    this.view.dom.addEventListener("edit-table", (event) => {
+      event.stopPropagation();
+      callbacks.table((event as CustomEvent).detail);
+    });
     this.view.dom.addEventListener("click", (event) => {
+      if ((event.target as Element).closest(".cm-editor") !== this.view.dom)
+        return;
       const mouse = event as MouseEvent;
       if (!(mouse.metaKey || mouse.ctrlKey)) return;
       const pos = this.view.posAtCoords({ x: mouse.clientX, y: mouse.clientY });
@@ -860,17 +1163,43 @@ export class MarkdownEditor {
       effects: EditorView.scrollIntoView(from, { y: "start", yMargin: 40 }),
     });
     this.view.focus();
+    // 大纲定位落在分栏内时，将焦点和源文位置映射到对应子编辑器。
+    if (!this.sourceMode)
+      requestAnimationFrame(() => {
+        for (const el of this.view.dom.querySelectorAll<HTMLElement>(
+          ".md-columns",
+        )) {
+          if (el.closest(".cm-editor") !== this.view.dom) continue;
+          const ui = columnUIs.get(el)!;
+          const index = ui.block.columns.findIndex(
+            (c) => from >= c.from && from <= c.to,
+          );
+          if (index < 0 || !ui.children[index]) continue;
+          ui.children[index].jump(from - ui.block.columns[index].from);
+          break;
+        }
+      });
   }
   find() {
     openSearchPanel(this.view);
   }
   undo() {
+    if (this.parentEditor) {
+      this.parentEditor.undo();
+      return;
+    }
+    const focused = this.active();
     undo(this.view);
-    this.view.focus();
+    (focused.view.dom.isConnected ? focused.view : this.view).focus();
   }
   redo() {
+    if (this.parentEditor) {
+      this.parentEditor.redo();
+      return;
+    }
+    const focused = this.active();
     redo(this.view);
-    this.view.focus();
+    (focused.view.dom.isConnected ? focused.view : this.view).focus();
   }
   destroy() {
     clearTimeout(this.outlineTimer);
