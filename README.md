@@ -109,3 +109,7 @@ swift run -c release TyporaNative --smoke-test .build/native-smoke
 - PDF 使用系统富文本导入与打印排版，样式不保证与 HTML 像素一致。PDFKit 可能将部分汉字提取为兼容字符，测试使用 Unicode 兼容归一化比较。
 - 文件树/跨文档搜索、公式、Mermaid、主题定制、Pandoc 属于 P1/P2。
 - 当前为本地构建，尚未进行开发者证书签名、公证或 Intel 实机验证。
+
+## TODO
+
+- [ ] 支持 Mermaid 绘图：将 `mermaid` 围栏代码块渲染为图表（暂不实现）。
