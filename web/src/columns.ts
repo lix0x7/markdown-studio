@@ -7,7 +7,7 @@ export type ColumnBlock = {
   original: string;
 };
 
-// 仅识别独占一行的 div.columns / md 标记，代码围栏内的示例不参与结构解析。
+// 仅识别独占一行的 div.columns / section / md 标记，代码围栏内的示例不参与结构解析。
 export function parseColumns(text: string): ColumnBlock[] {
   if (!text.includes("columns")) return [];
   const lines = text.split("\n"),
@@ -21,6 +21,8 @@ export function parseColumns(text: string): ColumnBlock[] {
       columns: ColumnBlock["columns"];
       content: number | null;
       depth: number;
+      section: "closed" | "open" | "filled";
+      valid: boolean;
     } | null = null;
   for (const line of lines) {
     const start = offset;
@@ -53,9 +55,28 @@ export function parseColumns(text: string): ColumnBlock[] {
         columns: [],
         content: null,
         depth: 0,
+        section: "closed",
+        valid: true,
       };
+    } else if (
+      block &&
+      block.content === null &&
+      /^\s*<section(?:\s[^>]*)?>\s*$/.test(line)
+    ) {
+      if (block.section !== "closed") block.valid = false;
+      block.section = "open";
+    } else if (
+      block &&
+      block.content === null &&
+      /^\s*<\/section>\s*$/.test(line)
+    ) {
+      if (block.section !== "filled") block.valid = false;
+      block.section = "closed";
     } else if (block && /^\s*<md>\s*$/.test(line)) {
-      if (block.content === null) block.content = offset;
+      if (block.content === null) {
+        if (block.section !== "open") block.valid = false;
+        block.content = offset;
+      }
       block.depth++;
     } else if (block && /^\s*<\/md>\s*$/.test(line) && block.content !== null) {
       if (--block.depth > 0) continue;
@@ -67,12 +88,17 @@ export function parseColumns(text: string): ColumnBlock[] {
         text: text.slice(block.content, end),
       });
       block.content = null;
+      block.section = "filled";
     } else if (
       block &&
       /^\s*<\/div>\s*$/.test(line) &&
       block.content === null
     ) {
-      if (block.columns.length >= 2) {
+      if (
+        block.valid &&
+        block.section === "closed" &&
+        block.columns.length >= 2
+      ) {
         const ratios = block.ratios.split(",").map(Number);
         blocks.push({
           from: block.from,

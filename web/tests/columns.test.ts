@@ -37,7 +37,7 @@ it("keeps empty and nested column content separate from container delimiters", (
   ).toEqual(["inner A", "inner B"]);
 });
 
-it("emits native grid sections and accepts legacy div/md documents", () => {
+it("emits native grid sections and rejects unwrapped md columns", () => {
   const host = document.createElement("div");
   const text = columnMarkup(["# Left", "# Right"], [2, 1]);
   host.innerHTML = text;
@@ -47,10 +47,16 @@ it("emits native grid sections and accepts legacy div/md documents", () => {
   expect(grid.querySelectorAll(":scope > section > md")).toHaveLength(2);
   const legacy =
     '<div class="columns" data-ratios="2,1">\n<md>\n# Left\n</md>\n<md>\n# Right\n</md>\n</div>';
-  expect(parseColumns(legacy)[0].columns.map((c) => c.text)).toEqual([
-    "# Left",
-    "# Right",
-  ]);
+  expect(parseColumns(legacy)).toEqual([]);
+  expect(parseColumns(text.replace(/<section[^>]*>\n/, ""))).toEqual([]);
+  expect(parseColumns(text.replace("\n</section>", ""))).toEqual([]);
+  expect(
+    parseColumns(
+      legacy
+        .replace("\n<md>", "\n<section>\n<md>")
+        .replace("\n</div>", "\n</section>\n</div>"),
+    ),
+  ).toEqual([]);
   expect(parseColumns(text)[0].columns.map((c) => c.text)).toEqual([
     "# Left",
     "# Right",

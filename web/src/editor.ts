@@ -174,7 +174,7 @@ class ColumnsWidget extends WidgetType {
           right: number;
           pixels: number;
         } | null = null;
-        // 同步标准 HTML 布局与编辑器比例；旧版结构在调整时升级为 section 包裹。
+        // 同步标准 HTML 布局与编辑器比例。
         const commit = (ratios: number[]) =>
           replace(
             columnMarkup(

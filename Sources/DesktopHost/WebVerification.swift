@@ -377,7 +377,7 @@ final class WebVerification {
         if(ed.view.state.selection.main.head<undoFixture.indexOf('| A') || ed.view.scrollDOM.scrollTop<1000)throw new Error('Outside table undo jumped to document start');
         ed.redo();await pause();await pause();
         if(!ed.buffer.raw.includes('Changed') || ed.view.scrollDOM.scrollTop<1000)throw new Error('Outside table redo lost table position');
-        const source='# Before\n\n<div class="columns" data-ratios="2,1,1">\n<md>\n# Left\n\nleft text\n</md>\n<md>\n## Middle\n\n| A | B |\n| --- | --- |\n| x | y |\n</md>\n<md>\n## Right\n\nright text\n</md>\n</div>\n\nAfter';
+        const source='# Before\n\n<div class="columns" data-ratios="2,1,1">\n<section>\n<md>\n# Left\n\nleft text\n</md>\n</section>\n<section>\n<md>\n## Middle\n\n| A | B |\n| --- | --- |\n| x | y |\n</md>\n</section>\n<section>\n<md>\n## Right\n\nright text\n</md>\n</section>\n</div>\n\nAfter';
         ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:source},selection:{anchor:0},scrollIntoView:true});await pause();await pause();
         let panes=[...document.querySelectorAll('.column-pane')];
         if(panes.length!==3)throw new Error('Three column editors did not mount');
@@ -416,7 +416,7 @@ final class WebVerification {
         ed.undo();await pause();await pause();
         ed.jump(ed.view.state.doc.toString().indexOf('## Right'));await pause();
         if(ed.active()===ed || !ed.active().view.state.doc.toString().includes('right text'))throw new Error('Outline did not focus column editor');
-        const nested='<div class="columns">\n<md>\nInner A\n</md>\n<md>\nInner B\n</md>\n</div>';
+        const nested='<div class="columns">\n<section>\n<md>\nInner A\n</md>\n</section>\n<section>\n<md>\nInner B\n</md>\n</section>\n</div>';
         const nestedSource=source.replace('left text',nested);
         ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:nestedSource},selection:{anchor:0},scrollIntoView:true});await pause();await pause();
         if(document.querySelectorAll('.column-pane').length!==5)throw new Error('Nested columns did not mount');
