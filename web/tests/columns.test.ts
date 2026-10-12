@@ -36,3 +36,23 @@ it("keeps empty and nested column content separate from container delimiters", (
     parseColumns(block.columns[1].text)[0].columns.map((c) => c.text),
   ).toEqual(["inner A", "inner B"]);
 });
+
+it("emits native grid sections and accepts legacy div/md documents", () => {
+  const host = document.createElement("div");
+  const text = columnMarkup(["# Left", "# Right"], [2, 1]);
+  host.innerHTML = text;
+  const grid = host.querySelector(".columns") as HTMLElement;
+  expect(grid.style.display).toBe("grid");
+  expect(grid.style.gridTemplateColumns).toBe("minmax(0,2fr) minmax(0,1fr)");
+  expect(grid.querySelectorAll(":scope > section > md")).toHaveLength(2);
+  const legacy =
+    '<div class="columns" data-ratios="2,1">\n<md>\n# Left\n</md>\n<md>\n# Right\n</md>\n</div>';
+  expect(parseColumns(legacy)[0].columns.map((c) => c.text)).toEqual([
+    "# Left",
+    "# Right",
+  ]);
+  expect(parseColumns(text)[0].columns.map((c) => c.text)).toEqual([
+    "# Left",
+    "# Right",
+  ]);
+});

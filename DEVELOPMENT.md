@@ -91,22 +91,28 @@ swift test
 工具栏“分栏”一键插入双栏，选中文字作为第一栏内容并直接进入栏内编辑。空栏中按退格键删除当前子栏；只有两栏时取消分栏结构、保留另一栏内容。删除可撤销，非空栏的退格仍正常删除文字。悬浮分栏区域后可继续“添加分栏”；“取消分栏”按从左到右顺序保留各栏内容。各栏复用 Markdown 编辑器，支持标题、列表、代码、表格、图片和嵌套分栏，修改实时写回文档。
 
 ```html
-<div class="columns" data-ratios="2,1,1">
+<div class="columns" data-ratios="2,1,1" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start">
+<section style="min-width:0;overflow-wrap:anywhere;white-space:pre-wrap">
 <md>
 # 第一栏
 
 支持 **Markdown**。
 </md>
+</section>
+<section style="min-width:0;overflow-wrap:anywhere;white-space:pre-wrap">
 <md>
 第二栏
 </md>
+</section>
+<section style="min-width:0;overflow-wrap:anywhere;white-space:pre-wrap">
 <md>
 第三栏
 </md>
+</section>
 </div>
 ```
 
-容器和 md 标签独占一行；代码围栏内的同名标签按普通代码处理。data-ratios 是各栏宽度权重，省略或无效时等宽。拖动分隔线连续调整相邻两栏，保持它们的总权重和其他栏比例不变；两侧各保留至少相邻总宽的 1%。分隔线可通过 Tab 聚焦，左右方向键微调。拖动结束保存比例，可一步撤销。HTML/PDF 导出转换为 CSS Grid，并渲染栏内 Markdown；其他 Markdown 阅读器需要对应扩展才能识别此语法。
+容器和 md 标签独占一行；代码围栏内的同名标签按普通代码处理。data-ratios 是各栏宽度权重，省略或无效时等宽。拖动分隔线连续调整相邻两栏，保持它们的总权重和其他栏比例不变；两侧各保留至少相邻总宽的 1%。分隔线可通过 Tab 聚焦，左右方向键微调。拖动结束保存比例，可一步撤销。HTML/PDF 导出转换为 CSS Grid，并渲染栏内 Markdown；新生成的源文为每个 md 增加 section 外层，并在 div 上保存 CSS Grid 布局与比例；允许原始 HTML 和内联样式的阅读器可直接显示分栏。栏内 Markdown 的递归解析仍需要扩展；过滤 HTML 或 style 的平台不保证保留布局。旧版 div + md 文件保持可读，添加、删除分栏或调整比例时升级为新结构。
 
 验证覆盖多栏源文映射、嵌套解析、空栏、代码围栏、HTML 清理，以及真实 WKWebView 中的栏内编辑、表格实时同步、原生保存同步、实例保持、相邻比例拖动、添加/取消分栏与撤销。
 

@@ -174,24 +174,14 @@ class ColumnsWidget extends WidgetType {
           right: number;
           pixels: number;
         } | null = null;
-        const commit = (ratios: number[]) => {
-          const opening = view.state.sliceDoc(ui.block.from, ui.block.openEnd);
-          const next = /data-ratios=["'][^"']*["']/.test(opening)
-            ? opening.replace(
-                /data-ratios=["'][^"']*["']/,
-                `data-ratios="${ratios.join(",")}"`,
-              )
-            : opening.replace(/>$/, ` data-ratios="${ratios.join(",")}">`);
-          view.dispatch({
-            changes: {
-              from: ui.block.from,
-              to: ui.block.openEnd,
-              insert: next,
-            },
-            annotations: isolateHistory.of("full"),
-            userEvent: "input.columns",
-          });
-        };
+        // 同步标准 HTML 布局与编辑器比例；旧版结构在调整时升级为 section 包裹。
+        const commit = (ratios: number[]) =>
+          replace(
+            columnMarkup(
+              ui.block.columns.map((c) => c.text),
+              ratios,
+            ),
+          );
         divider.onpointerdown = (e) => {
           if (e.button !== 0) return;
           e.preventDefault();

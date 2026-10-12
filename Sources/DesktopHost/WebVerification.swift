@@ -431,6 +431,11 @@ final class WebVerification {
         if(document.querySelector('[role="dialog"]') || document.querySelectorAll('.column-pane').length!==2)throw new Error('Columns command did not directly insert two columns');
         if(ed.active()===ed || !ed.active().view.hasFocus)throw new Error('New columns did not focus first editor');
         const twoColumns=ed.view.state.doc.toString();
+        // 不经过应用的 Markdown 渲染器，直接按 HTML 验证 section 的降级分栏布局。
+        const fallback=document.createElement('div');fallback.style.cssText='position:fixed;top:0;left:0;width:800px';fallback.innerHTML=twoColumns;document.body.append(fallback);
+        const sections=fallback.querySelectorAll('.columns > section');
+        if(sections.length!==2 || sections[1].getBoundingClientRect().left<=sections[0].getBoundingClientRect().right || Math.abs(sections[0].getBoundingClientRect().width-sections[1].getBoundingClientRect().width)>1)throw new Error('Native HTML fallback did not retain two-column layout');
+        fallback.remove();
         let empty=document.querySelectorAll('.column-pane')[1].querySelector('.cm-content');empty.focus();
         empty.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',code:'Backspace',bubbles:true,cancelable:true}));await pause();await pause();
         if(document.querySelector('.md-columns') || !ed.view.state.doc.toString().includes(selectedText))throw new Error('Empty column removal did not unwrap pair with content preserved');

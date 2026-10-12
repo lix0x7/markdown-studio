@@ -97,8 +97,13 @@ export function columnMarkup(
   ratios = contents.map(() => 1),
 ): string {
   return (
-    `<div class="columns" data-ratios="${ratios.join(",")}">\n` +
-    contents.map((text) => `<md>\n${text}\n</md>`).join("\n") +
+    `<div class="columns" data-ratios="${ratios.join(",")}" style="display:grid;grid-template-columns:${ratios.map((r) => `minmax(0,${r}fr)`).join(" ")};gap:24px;align-items:start">\n` +
+    contents
+      .map(
+        (text) =>
+          `<section style="min-width:0;overflow-wrap:anywhere;white-space:pre-wrap">\n<md>\n${text}\n</md>\n</section>`,
+      )
+      .join("\n") +
     "\n</div>"
   );
 }

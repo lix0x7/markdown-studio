@@ -32,22 +32,26 @@ Typora 也具备可视化表格和实时预览，本项目的区别主要在具�
 CommonMark 定义了原始 HTML 的解析规则，但不能据此认为 HTML 标签内部的文本一定会再次作为 Markdown 解析。本项目会先识别分栏结构，再分别解析各栏内容。例如：
 
 ```html
-<div class="columns" data-ratios="2,1">
+<div class="columns" data-ratios="2,1" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:24px;align-items:start">
+<section style="min-width:0;overflow-wrap:anywhere;white-space:pre-wrap">
 <md>
 ## 左栏
 
 这里可以写 **Markdown**。
 </md>
+</section>
+<section style="min-width:0;overflow-wrap:anywhere;white-space:pre-wrap">
 <md>
 ## 右栏
 
 - 支持列表
 - 支持独立编辑
 </md>
+</section>
 </div>
 ```
 
-这段内容在本项目中显示为 2:1 的两栏；直接交给 Typora、GitHub 或普通 CommonMark 渲染器，不保证得到相同效果。向外分享时，优先使用双方支持的 Markdown 语法；需要保留分栏展示时，可以导出 HTML / PDF。HTML 导出会将分栏转换为 CSS Grid，但不会附带本应用的编辑交互。
+这段内容在本项目中显示为 2:1 的两栏。外层 section 和内联 CSS Grid 让保留 HTML / style 的其他渲染器也能显示分栏；如果不支持 md 扩展，栏内可能仍显示 Markdown 源文。过滤 HTML 或内联样式的平台（例如 GitHub）不保证保留分栏效果。向外分享时，优先使用双方支持的 Markdown 语法；需要保留分栏展示时，可以导出 HTML / PDF。HTML 导出会将分栏转换为 CSS Grid，但不会附带本应用的编辑交互。
 
 规范参考：[CommonMark](https://spec.commonmark.org/)、[GitHub Flavored Markdown](https://github.github.com/gfm/)。
 
