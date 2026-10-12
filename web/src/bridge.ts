@@ -59,7 +59,12 @@ export async function request<T = any>(
     return {
       sidebarWidth: Number(localStorage.getItem("sidebarWidth")) || 228,
       imagePasteMode: localStorage.getItem("imagePasteMode") ?? "directory",
+      pageWidth: localStorage.getItem("pageWidth") ?? "default",
     } as T;
+  if (action === "setPageWidth") {
+    localStorage.setItem("pageWidth", String(data.mode));
+    return true as T;
+  }
   if (action === "setImagePasteMode") {
     localStorage.setItem("imagePasteMode", String(data.mode));
     return true as T;

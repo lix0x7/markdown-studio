@@ -379,8 +379,28 @@ final class WebVerification {
           if(!ed.buffer.raw.includes('width="128" height="128"'))throw new Error('Image resize undo failed');
           api.command('settings');await frame();
           if(!document.querySelector('.settings-field select'))throw new Error('Global settings panel missing');
+          const widthSelect=document.querySelector('select[aria-label="页面宽度"]');
+          if(!widthSelect || widthSelect.options.length!==3)throw new Error('Page width options missing');
+          const app=document.querySelector('.app'), oldWidth=app.style.width, sourceBeforeWidth=ed.buffer.raw;
+          app.style.width='1700px';
+          try {
+            const widths=[];
+            for(const mode of ['default','wide','full']) {
+              Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(widthSelect,mode);
+              widthSelect.dispatchEvent(new Event('change',{bubbles:true}));await frame();await frame();
+              if((await api.request('getPreferences')).pageWidth!==mode || app.dataset.pageWidth!==mode)throw new Error('Page width did not persist or apply: '+mode);
+              widths.push(ed.view.contentDOM.getBoundingClientRect().width);
+            }
+            if(Math.abs(widths[0]-796)>1 || Math.abs(widths[1]-1100)>1 || widths[2]<=widths[1])throw new Error('Page widths incorrect: '+widths);
+            if(ed.buffer.raw!==sourceBeforeWidth)throw new Error('Page width changed document content');
+            await api.request('setPageWidth',{mode:'default'});await frame();
+            if(app.dataset.pageWidth!=='default' || widthSelect.value!=='default')throw new Error('Native preference broadcast not applied');
+          } finally {
+            app.style.width=oldWidth;
+            await api.request('setPageWidth',{mode:prefs.pageWidth ?? 'default'});await frame();
+          }
           document.querySelector('[aria-label="关闭"]').click();
-          return ref+'; base64, alignment, proportional resize, undo and settings passed';
+          return ref+'; base64, alignment, proportional resize, undo, settings and page widths passed';
         } finally { await api.request('setImagePasteMode',{mode:prefs.imagePasteMode ?? 'directory'}); }
 
         """#

@@ -120,6 +120,7 @@ export default function App() {
   const tableOwner = useRef<MarkdownEditor | null>(null);
   const [settings, setSettings] = useState(false);
   const [imagePasteMode, setImagePasteMode] = useState("directory");
+  const [pageWidth, setPageWidth] = useState("default");
   const [sidebarWidth, setSidebarWidth] = useState(228);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const drag = useRef<{ x: number; width: number } | null>(null);
@@ -131,12 +132,26 @@ export default function App() {
     );
   };
   useEffect(() => {
-    void request<{ sidebarWidth: number }>("getPreferences")
-      .then((p) => setSidebarWidth(p.sidebarWidth))
+    void request<{ sidebarWidth: number; pageWidth?: string }>("getPreferences")
+      .then((p) => {
+        setSidebarWidth(p.sidebarWidth);
+        setPageWidth(p.pageWidth ?? "default");
+      })
       .catch((e) => setError(e.message));
     const resize = () => setWindowWidth(window.innerWidth);
+    const widthChanged = (event: Event) =>
+      setPageWidth((event as CustomEvent<string>).detail);
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === "pageWidth") setPageWidth(event.newValue ?? "default");
+    };
     window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+    window.addEventListener("native:pageWidth", widthChanged);
+    window.addEventListener("storage", storageChanged);
+    return () => {
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("native:pageWidth", widthChanged);
+      window.removeEventListener("storage", storageChanged);
+    };
   }, []);
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -279,8 +294,12 @@ export default function App() {
   async function command(name: string) {
     if (name === "settings") {
       try {
-        const p = await request<{ imagePasteMode?: string }>("getPreferences");
+        const p = await request<{
+          imagePasteMode?: string;
+          pageWidth?: string;
+        }>("getPreferences");
         setImagePasteMode(p.imagePasteMode ?? "directory");
+        setPageWidth(p.pageWidth ?? "default");
         setSettings(true);
       } catch (e) {
         setError((e as Error).message);
@@ -593,6 +612,7 @@ export default function App() {
   return (
     <div
       className={"app" + (!sidebar ? " sidebar-hidden" : "")}
+      data-page-width={pageWidth}
       style={{
         gridTemplateColumns: `${sidebar && windowWidth > 760 ? visibleSidebarWidth : 0}px minmax(0, 1fr)`,
       }}
@@ -649,14 +669,7 @@ export default function App() {
           <button
             className="tool"
             aria-label="全局设置"
-            onClick={() => {
-              void request<{ imagePasteMode?: string }>("getPreferences")
-                .then((p) => {
-                  setImagePasteMode(p.imagePasteMode ?? "directory");
-                  setSettings(true);
-                })
-                .catch((e) => setError(e.message));
-            }}
+            onClick={() => void command("settings")}
           >
             设置
           </button>
@@ -1064,6 +1077,23 @@ export default function App() {
           description="设置对所有文档生效，自动保存。"
           close={() => setSettings(false)}
         >
+          <label className="settings-field">
+            页面宽度
+            <select
+              aria-label="页面宽度"
+              value={pageWidth}
+              onChange={(e) => {
+                const mode = e.target.value;
+                void request("setPageWidth", { mode })
+                  .then(() => setPageWidth(mode))
+                  .catch((e) => setError(e.message));
+              }}
+            >
+              <option value="default">默认</option>
+              <option value="wide">较宽</option>
+              <option value="full">全宽</option>
+            </select>
+          </label>
           <label className="settings-field">
             图片粘贴方式
             <select

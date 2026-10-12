@@ -63,7 +63,13 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
             let result: Any
             switch action {
             case "getPreferences":
-                result = ["sidebarWidth": UserDefaults.standard.object(forKey: "sidebarWidth") as? Int ?? 228, "imagePasteMode": UserDefaults.standard.string(forKey: "imagePasteMode") ?? "directory"]
+                result = ["sidebarWidth": UserDefaults.standard.object(forKey: "sidebarWidth") as? Int ?? 228, "imagePasteMode": UserDefaults.standard.string(forKey: "imagePasteMode") ?? "directory", "pageWidth": UserDefaults.standard.string(forKey: "pageWidth") ?? "default"]
+            case "setPageWidth":
+                guard let mode = data["mode"] as? String, ["default", "wide", "full"].contains(mode) else { throw Self.error("页面宽度无效。") }
+                UserDefaults.standard.set(mode, forKey: "pageWidth")
+                // 全局布局偏好立即同步到已经打开的文档窗口。
+                for window in NSApp.windows { (window.windowController as? Host)?.event("pageWidth", mode) }
+                result = true
             case "setImagePasteMode":
                 guard let mode = data["mode"] as? String, ["directory", "base64"].contains(mode) else { throw Self.error("图片粘贴方式无效。") }
                 UserDefaults.standard.set(mode, forKey: "imagePasteMode"); result = true
