@@ -456,6 +456,83 @@ export class MarkdownEditor {
             }
           }),
           EditorView.domEventHandlers({
+            dblclick: (event, view) => {
+              if (
+                event.button !== 0 ||
+                event.metaKey ||
+                event.ctrlKey ||
+                event.altKey ||
+                event.shiftKey
+              )
+                return false;
+              const target = event.target as HTMLElement;
+              if (
+                !view.scrollDOM.contains(target) ||
+                target.closest(".md-widget, .cm-gutters, button, a, input")
+              )
+                return false;
+              const content = view.contentDOM.getBoundingClientRect();
+              if (event.clientX < content.left || event.clientX > content.right)
+                return false;
+              // 只接管文字之外的空白；实际字符上的双击继续交给 CodeMirror 选词。
+              const lineDOM = target.closest(".cm-line");
+              if (lineDOM) {
+                const walker = document.createTreeWalker(
+                  lineDOM,
+                  NodeFilter.SHOW_TEXT,
+                );
+                const range = document.createRange();
+                for (
+                  let node = walker.nextNode();
+                  node;
+                  node = walker.nextNode()
+                ) {
+                  range.selectNodeContents(node);
+                  for (const rect of range.getClientRects()) {
+                    if (
+                      event.clientX >= rect.left &&
+                      event.clientX <= rect.right &&
+                      event.clientY >= rect.top &&
+                      event.clientY <= rect.bottom
+                    )
+                      return false;
+                  }
+                }
+              }
+              const pos = view.posAtCoords(
+                { x: event.clientX, y: event.clientY },
+                false,
+              );
+              if (pos === null) return false;
+              const line = view.state.doc.lineAt(pos);
+              const first = view.coordsAtPos(0),
+                last = view.coordsAtPos(view.state.doc.length);
+              let at = line.to,
+                count = 1,
+                anchor = at + 1;
+              if (first && event.clientY < first.top) {
+                at = 0;
+                anchor = 0;
+              } else if (last && event.clientY > last.bottom) {
+                at = view.state.doc.length;
+                count = Math.max(
+                  1,
+                  Math.ceil(
+                    (event.clientY - last.bottom) / view.defaultLineHeight,
+                  ),
+                );
+                anchor = at + count;
+              }
+              event.preventDefault();
+              view.dispatch({
+                changes: { from: at, insert: "\n".repeat(count) },
+                selection: { anchor },
+                userEvent: "input",
+                scrollIntoView: true,
+              });
+              view.focus();
+              return true;
+            },
             paste: (event) => {
               const files = Array.from(event.clipboardData?.files ?? []).filter(
                 (f) => f.type.startsWith("image/"),

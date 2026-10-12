@@ -45,6 +45,19 @@ final class WebVerification {
         ed.undo();native=await api.request('ready');check(native.text===before,'Multiline undo restores mixed newline metadata');
         ed.view.dispatch({selection:{anchor:at,head:at+5}});ed.wrap('**');
         await api.request('ready');
+        const saved=ed.buffer.raw;
+        const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+        await nextFrame();
+        const lineDOM=ed.view.contentDOM.querySelector('.cm-line');
+        const range=document.createRange();range.selectNodeContents(lineDOM);
+        const textRect=range.getBoundingClientRect(), lineRect=lineDOM.getBoundingClientRect();
+        lineDOM.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,clientX:textRect.left+3,clientY:(textRect.top+textRect.bottom)/2}));
+        check(ed.buffer.raw===saved,'Double click on text leaves content unchanged');
+        lineDOM.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,clientX:lineRect.right-5,clientY:(textRect.top+textRect.bottom)/2}));
+        check(ed.view.state.doc.line(ed.view.state.selection.main.head===0?1:ed.view.state.doc.lineAt(ed.view.state.selection.main.head).number).text==='','Double click on blank area inserts an empty line and places caret');
+        check(ed.buffer.raw===saved.replace('\r\n','\r\n\r\n'),'Blank line insertion preserves surrounding mixed line endings');
+        ed.undo();check(ed.buffer.raw===saved,'Blank line insertion is undoable');
+        await api.request('ready');
         return results;
         """#
         host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
