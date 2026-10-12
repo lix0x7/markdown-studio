@@ -366,6 +366,7 @@ main {
 }
 .editor-host {
   height: 100%;
+  container-type: inline-size;
 }
 .cm-editor {
   height: 100%;
@@ -497,6 +498,11 @@ main {
   /* 块组件的间距必须计入自身高度，否则 CodeMirror 点击行坐标会偏移。 */
   margin: 0;
   padding: 12px 0 18px;
+}
+/* 表格展示区铺满编辑区；只突破横向正文边界，不改变块高度计量。 */
+.md-table {
+  width: calc(100cqw - 48px);
+  margin-left: calc((100% - 100cqw + 48px) / 2);
 }
 .table-scroll {
   max-width: 100%;

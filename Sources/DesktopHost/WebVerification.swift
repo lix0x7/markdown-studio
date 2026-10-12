@@ -88,6 +88,10 @@ final class WebVerification {
         await nextFrame();await nextFrame();
         const tableScroll=[...document.querySelectorAll('.table-scroll')].at(-1);
         const wideTable=tableScroll.querySelector('table');
+        const writingWidth=document.querySelector('.editor-host').getBoundingClientRect().width;
+        check(Math.abs(tableScroll.getBoundingClientRect().width-(writingWidth-48))<2,'Table viewport fills editor width with side gutters');
+        const paragraphWidth=ed.view.contentDOM.getBoundingClientRect().width;
+        check(paragraphWidth<=796,'Normal writing column retains its reading width');
         check(wideTable.getBoundingClientRect().width<=window.innerWidth*2+2,'Preview table stays within twice the window width');
         check(tableScroll.scrollWidth>tableScroll.clientWidth,'Wide preview table overflows its own scroll container');
         tableScroll.scrollLeft=120;
