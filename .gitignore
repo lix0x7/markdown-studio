@@ -2,3 +2,9 @@
 dist/
 .DS_Store
 .swiftpm/
+
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
+web/test-results/
+web/playwright-report/

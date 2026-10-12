@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 import MarkdownCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var windows: [EditorWindowController] = []
-    private let recovery = RecoveryStore(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("MarkdownNative/Recovery", isDirectory: true))
+    private var windows: [Host] = []
+    private let recovery = RecoveryStore(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("MarkdownNativeWeb/Recovery", isDirectory: true))
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenus()
@@ -17,11 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
     private func show(url: URL? = nil, record: RecoveryRecord? = nil) throws {
-        if let url, let existing = windows.first(where: { $0.fileURL?.standardizedFileURL == url.standardizedFileURL }) { existing.showWindow(nil); return }
-        let controller = try EditorWindowController(url: url, record: record, recovery: recovery)
+        if let url, let existing = windows.first(where: { $0.url?.standardizedFileURL == url.standardizedFileURL }) { existing.showWindow(nil); return }
+        let controller = try Host(url: url, record: record, recovery: recovery)
         windows.append(controller)
         controller.onClose = { [weak self, weak controller] in self?.windows.removeAll { $0 === controller } }
-        controller.showWindow(nil)
+        controller.onNew = { [weak self] in self?.newDocument(nil) }; controller.onOpen = { [weak self] in self?.openDocument(nil) }; controller.showWindow(nil)
     }
     private func open(_ url: URL) {
         do { try show(url: url); NSDocumentController.shared.noteNewRecentDocumentURL(url) }
@@ -37,14 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for window in Array(windows) { window.close() }
         return .terminateNow
     }
-    func applicationDidResignActive(_ notification: Notification) { windows.forEach { $0.flushRecovery() } }
+    func applicationDidResignActive(_ notification: Notification) { windows.forEach { $0.persistDraft() } }
     @objc private func newDocument(_ sender: Any?) { do { try show() } catch { NSAlert(error: error).runModal() } }
     @objc private func openDocument(_ sender: Any?) {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.plainText, .init(filenameExtension: "md") ?? .plainText]; panel.allowsMultipleSelection = true
         if panel.runModal() == .OK { panel.urls.forEach(open) }
     }
     @objc private func command(_ sender: NSMenuItem) {
-        (NSApp.keyWindow?.windowController as? EditorWindowController)?.command(sender.representedObject as? String ?? "")
+        (NSApp.keyWindow?.windowController as? Host)?.event("command", sender.representedObject as? String ?? "")
     }
     // 原生菜单通过响应链处理编辑命令，文档命令转发到当前窗口。
     private func buildMenus() {
@@ -58,11 +58,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.keyEquivalentModifierMask = modifiers; item.target = name == nil ? target : self; item.representedObject = name
             parent.addItem(item)
         }
-        let app = submenu("Markdown Native")
-        item(app, "关于 Markdown Native", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), target: NSApp)
+        let app = submenu("Markdown Studio")
+        item(app, "关于 Markdown Studio", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), target: NSApp)
         app.addItem(.separator())
-        item(app, "隐藏 Markdown Native", "h", action: #selector(NSApplication.hide(_:)), target: NSApp)
-        item(app, "退出 Markdown Native", "q", action: #selector(NSApplication.terminate(_:)), target: NSApp)
+        item(app, "隐藏 Markdown Studio", "h", action: #selector(NSApplication.hide(_:)), target: NSApp)
+        item(app, "退出 Markdown Studio", "q", action: #selector(NSApplication.terminate(_:)), target: NSApp)
         let file = submenu("文件")
         item(file, "新建", "n", action: #selector(newDocument(_:)), target: self)
         item(file, "打开…", "o", action: #selector(openDocument(_:)), target: self)
@@ -72,13 +72,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         file.addItem(.separator()); item(file, "导出 HTML…", command: "exportHTML"); item(file, "导出 PDF…", "e", [.command, .shift], command: "exportPDF")
         file.addItem(.separator()); item(file, "关闭窗口", "w", action: #selector(NSWindow.performClose(_:)))
         let edit = submenu("编辑")
-        item(edit, "撤销", "z", action: Selector(("undo:"))); item(edit, "重做", "z", [.command, .shift], action: Selector(("redo:")))
+        item(edit, "撤销", "z", command: "undo"); item(edit, "重做", "z", [.command, .shift], command: "redo")
         edit.addItem(.separator()); item(edit, "剪切", "x", action: #selector(NSText.cut(_:))); item(edit, "复制", "c", action: #selector(NSText.copy(_:)))
         item(edit, "粘贴", "v", action: #selector(NSText.paste(_:))); item(edit, "全选", "a", action: #selector(NSText.selectAll(_:)))
         edit.addItem(.separator())
-        item(edit, "查找…", "f", action: #selector(NSTextView.performFindPanelAction(_:)))
+        item(edit, "查找…", "f", command: "find")
         edit.items.last?.tag = NSTextFinder.Action.showFindInterface.rawValue
-        item(edit, "查找与替换…", "f", [.command, .option], action: #selector(NSTextView.performFindPanelAction(_:)))
+        item(edit, "查找与替换…", "f", [.command, .option], command: "find")
         edit.items.last?.tag = NSTextFinder.Action.showReplaceInterface.rawValue
         let format = submenu("格式")
         item(format, "加粗", "b", command: "bold"); item(format, "斜体", "i", command: "italic")
