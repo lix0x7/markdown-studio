@@ -110,8 +110,8 @@ class BlockWidget extends WidgetType {
       img.alt = img.alt || "图片";
       request<string>("imageURL", { path })
         .then((url) => {
-          img.src = url;
           img.onload = () => view.requestMeasure();
+          img.src = url;
         })
         .catch(() => {
           el.classList.add("image-error");
@@ -119,14 +119,104 @@ class BlockWidget extends WidgetType {
         });
     });
     if (this.kind === "image") {
-      const button = document.createElement("button");
-      button.className = "image-edit";
-      button.textContent = "编辑图片引用";
-      button.onclick = () => {
+      const img = el.querySelector("img")!;
+      const original = document.createElement("div");
+      original.innerHTML = renderHTML(this.text);
+      const source = original.querySelector("img")!;
+      const toolbar = document.createElement("div");
+      toolbar.className = "image-toolbar";
+      toolbar.setAttribute("role", "toolbar");
+      toolbar.setAttribute("aria-label", "图片布局");
+      // 只在操作完成后写回一次事务；标准 HTML 属性保留图片引用、对齐和尺寸。
+      const commit = () => {
+        view.dispatch({
+          changes: {
+            from: this.from,
+            to: this.from + this.text.length,
+            insert: source.outerHTML,
+          },
+          userEvent: "input",
+        });
+        view.requestMeasure();
+      };
+      for (const [align, label] of [
+        ["left", "左对齐"],
+        ["center", "居中"],
+        ["right", "右对齐"],
+      ]) {
+        const button = document.createElement("button");
+        button.textContent = label;
+        button.title = label;
+        button.setAttribute("aria-label", "图片" + label);
+        button.onclick = () => {
+          source.setAttribute("align", align);
+          commit();
+        };
+        toolbar.append(button);
+      }
+      const edit = document.createElement("button");
+      edit.textContent = "编辑引用";
+      edit.onclick = () => {
         view.dispatch({ selection: { anchor: this.from + 1 } });
         view.focus();
       };
-      el.append(button);
+      toolbar.append(edit);
+      el.append(toolbar);
+      const handle = document.createElement("button");
+      handle.className = "image-resize";
+      handle.setAttribute("aria-label", "锁定比例调整图片大小");
+      handle.title = "拖动缩放（锁定比例）";
+      handle.textContent = "↘";
+      const frame = document.createElement("div");
+      frame.className = "image-frame";
+      frame.dataset.align = source.getAttribute("align") ?? "left";
+      img.replaceWith(frame);
+      frame.append(img, handle);
+      let start: { x: number; y: number; width: number; ratio: number } | null =
+        null;
+      handle.onpointerdown = (e) => {
+        e.preventDefault();
+        const rect = img.getBoundingClientRect();
+        start = {
+          x: e.clientX,
+          y: e.clientY,
+          width: rect.width,
+          ratio: rect.width / rect.height,
+        };
+        handle.setPointerCapture(e.pointerId);
+      };
+      handle.onpointermove = (e) => {
+        if (!start) return;
+        const delta =
+          Math.abs(e.clientX - start.x) >= Math.abs(e.clientY - start.y)
+            ? e.clientX - start.x
+            : (e.clientY - start.y) * start.ratio;
+        const width = Math.round(
+          Math.max(32, Math.min(el.clientWidth, start.width + delta)),
+        );
+        img.style.width = width + "px";
+        img.style.height = "auto";
+        view.requestMeasure();
+      };
+      handle.onpointerup = (e) => {
+        if (!start) return;
+        source.setAttribute(
+          "width",
+          String(Math.round(img.getBoundingClientRect().width)),
+        );
+        source.setAttribute(
+          "height",
+          String(Math.round(img.getBoundingClientRect().width / start.ratio)),
+        );
+        start = null;
+        handle.releasePointerCapture(e.pointerId);
+        commit();
+      };
+      handle.onpointercancel = () => {
+        start = null;
+        img.style.width = "";
+        view.requestMeasure();
+      };
     }
     return el;
   }
@@ -164,8 +254,8 @@ function buildDecorations(
     to: Math.min(range.to, state.doc.length),
     enter(n) {
       const name = n.name,
-        from = n.from,
-        to = n.to;
+        from = n.from;
+      let to = n.to;
       if (name === "Table") {
         if (!editing(from, to)) {
           out.push(
@@ -185,7 +275,12 @@ function buildDecorations(
           line(state.doc.line(i).from, "md-table-source");
         return false;
       }
-      if (name === "Image") {
+      if (
+        name === "Image" ||
+        (name === "HTMLBlock" &&
+          /^<img\b[^>]*>\s*$/.test(state.sliceDoc(from, to)))
+      ) {
+        if (name === "HTMLBlock") to = state.doc.lineAt(from).to;
         const l = state.doc.lineAt(from);
         if (!editing(from, to) && l.from === from && l.to === to) {
           out.push(

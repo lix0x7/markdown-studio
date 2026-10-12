@@ -109,6 +109,8 @@ export default function App() {
     [count, setCount] = useState(0),
     [empty, setEmpty] = useState(true),
     [active, setActive] = useState(0);
+  const [settings, setSettings] = useState(false);
+  const [imagePasteMode, setImagePasteMode] = useState("directory");
   const [sidebarWidth, setSidebarWidth] = useState(228);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const drag = useRef<{ x: number; width: number } | null>(null);
@@ -260,6 +262,16 @@ export default function App() {
     }
   }
   async function command(name: string) {
+    if (name === "settings") {
+      try {
+        const p = await request<{ imagePasteMode?: string }>("getPreferences");
+        setImagePasteMode(p.imagePasteMode ?? "directory");
+        setSettings(true);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+      return;
+    }
     if (table) {
       if (name === "undo" || name === "redo")
         window.dispatchEvent(
@@ -613,6 +625,20 @@ export default function App() {
         <div className="sidebar-bottom">
           <span className="local-dot" />
           文件保存在本机
+          <button
+            className="tool"
+            aria-label="全局设置"
+            onClick={() => {
+              void request<{ imagePasteMode?: string }>("getPreferences")
+                .then((p) => {
+                  setImagePasteMode(p.imagePasteMode ?? "directory");
+                  setSettings(true);
+                })
+                .catch((e) => setError(e.message));
+            }}
+          >
+            设置
+          </button>
         </div>
         <div
           className="sidebar-resizer"
@@ -960,6 +986,35 @@ export default function App() {
           </form>
         </Modal>
       )}
+      {settings && (
+        <Modal
+          title="全局设置"
+          description="设置对所有文档生效，自动保存。"
+          close={() => setSettings(false)}
+        >
+          <label className="settings-field">
+            图片粘贴方式
+            <select
+              value={imagePasteMode}
+              onChange={(e) => {
+                const mode = e.target.value;
+                void request("setImagePasteMode", { mode })
+                  .then(() => setImagePasteMode(mode))
+                  .catch((e) => setError(e.message));
+              }}
+            >
+              <option value="directory">
+                保存到 Markdown 文件所在目录（默认）
+              </option>
+              <option value="base64">内嵌 Base64</option>
+            </select>
+          </label>
+          <p>
+            目录方式使用相对路径；Base64
+            将图片数据写入文档，无需额外图片文件。插入和拖入图片也使用此设置。
+          </p>
+        </Modal>
+      )}
       {table && (
         <TableDrawer
           table={table}
@@ -981,4 +1036,4 @@ export default function App() {
     </div>
   );
 }
-const exportCSS = `body{font:16px/1.8 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#25282b;margin:40px auto;max-width:760px;padding:0 24px;overflow-wrap:anywhere}h1,h2,h3{line-height:1.4;break-after:avoid}h1{font-size:32px}h2{font-size:24px}blockquote{margin:24px 0;padding:4px 20px;border-left:3px solid #a5b5ab;color:#596760}pre{background:#f4f5f4;padding:20px;white-space:pre-wrap;border-radius:8px}code{font:13px/1.7 Menlo,monospace}table{border-collapse:collapse;width:100%;margin:24px 0}td,th{border:1px solid #ddd;padding:10px 14px;text-align:left}th{background:#f6f7f6}[align=right]{text-align:right}[align=center]{text-align:center}img{max-width:100%;height:auto}a{color:#3c6b54}tr,img{break-inside:avoid}@media print{body{margin:0;max-width:none;padding:0}}`;
+const exportCSS = `body{font:16px/1.8 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#25282b;margin:40px auto;max-width:760px;padding:0 24px;overflow-wrap:anywhere}h1,h2,h3{line-height:1.4;break-after:avoid}h1{font-size:32px}h2{font-size:24px}blockquote{margin:24px 0;padding:4px 20px;border-left:3px solid #a5b5ab;color:#596760}pre{background:#f4f5f4;padding:20px;white-space:pre-wrap;border-radius:8px}code{font:13px/1.7 Menlo,monospace}table{border-collapse:collapse;width:100%;margin:24px 0}td,th{border:1px solid #ddd;padding:10px 14px;text-align:left}th{background:#f6f7f6}[align=right]{text-align:right}[align=center]{text-align:center}img{max-width:100%;height:auto}img[align]{display:block;float:none}img[align=center]{margin-inline:auto}img[align=right]{margin-left:auto}a{color:#3c6b54}tr,img{break-inside:avoid}@media print{body{margin:0;max-width:none;padding:0}}`;

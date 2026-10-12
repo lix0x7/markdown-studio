@@ -51,13 +51,21 @@ export async function request<T = any>(
         !["getPreferences", "setSidebarWidth"].includes(action) ||
         !(error instanceof Error) ||
         error.message !== `不支持的操作：${action}`
-      ) throw error;
+      )
+        throw error;
     }
   }
   if (action === "getPreferences")
     return {
       sidebarWidth: Number(localStorage.getItem("sidebarWidth")) || 228,
+      imagePasteMode: localStorage.getItem("imagePasteMode") ?? "directory",
     } as T;
+  if (action === "setImagePasteMode") {
+    localStorage.setItem("imagePasteMode", String(data.mode));
+    return true as T;
+  }
+  if (action === "importImage")
+    return `data:${String(data.name).toLowerCase().endsWith(".jpg") ? "image/jpeg" : "image/png"};base64,${data.data}` as T;
   if (action === "setSidebarWidth") {
     localStorage.setItem("sidebarWidth", String(data.width));
     return true as T;

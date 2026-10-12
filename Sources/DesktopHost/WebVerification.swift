@@ -252,13 +252,46 @@ final class WebVerification {
     }
     func images() {
         let script = #"""
-        const api=window.editorAPI;
-        const ref=await api.request('importImage',{name:'fixture.png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='});
-        const url=await api.request('imageURL',{path:ref});
-        if(!url.startsWith('data:image/png;base64,'))throw new Error('Local asset did not resolve');
-        const image=new Image();image.src=url;await image.decode();
-        if(!image.naturalWidth)throw new Error('Image could not be decoded');
-        return ref;
+        const api=window.editorAPI, ed=api.editor;
+        const prefs=await api.request('getPreferences');
+        const data='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+        try {
+          await api.request('setImagePasteMode',{mode:'directory'});
+          const ref=await api.request('importImage',{name:'fixture.png',data});
+          if(ref.includes('/') || ref.startsWith('data:'))throw new Error('Image not saved beside document');
+          const url=await api.request('imageURL',{path:ref});
+          const image=new Image();image.src=url;await image.decode();
+          if(!image.naturalWidth)throw new Error('Local image decode failed');
+          await api.request('setImagePasteMode',{mode:'base64'});
+          const embedded=await api.request('importImage',{name:'fixture.png',data});
+          if(embedded!=='data:image/png;base64,'+data)throw new Error('Base64 image mismatch');
+          if(await api.request('imageURL',{path:embedded})!==embedded)throw new Error('Base64 image resolution failed');
+          const text='# Image test\n\n<img src="'+embedded+'" alt="fixture" width="128" height="128">\n\nEnd';
+          ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:text},selection:{anchor:0},scrollIntoView:true});
+          const frame=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+          await frame();await frame();
+          let widget=document.querySelector('.md-image');
+          if(!widget)throw new Error('HTML image preview missing');
+          await widget.querySelector('img').decode();await frame();
+          widget.querySelector('[aria-label="图片居中"]').click();await frame();
+          if(!ed.buffer.raw.includes('align="center"'))throw new Error('Image alignment was not saved');
+          widget=document.querySelector('.md-image');
+          await widget.querySelector('img').decode();await frame();
+          const handle=widget.querySelector('.image-resize');
+          // 合成事件没有真实 pointer capture，单独验证拖拽处理器的尺寸计算与提交。
+          handle.setPointerCapture=()=>{};handle.releasePointerCapture=()=>{};
+          handle.dispatchEvent(new PointerEvent('pointerdown',{clientX:100,clientY:100,pointerId:1,bubbles:true}));
+          handle.dispatchEvent(new PointerEvent('pointermove',{clientX:140,clientY:100,pointerId:1,bubbles:true}));
+          handle.dispatchEvent(new PointerEvent('pointerup',{clientX:140,clientY:100,pointerId:1,bubbles:true}));await frame();
+          if(!ed.buffer.raw.includes('width="168" height="168"'))throw new Error('Image proportional resize failed: '+ed.buffer.raw.slice(-120));
+          ed.undo();await frame();
+          if(!ed.buffer.raw.includes('width="128" height="128"'))throw new Error('Image resize undo failed');
+          api.command('settings');await frame();
+          if(!document.querySelector('.settings-field select'))throw new Error('Global settings panel missing');
+          document.querySelector('[aria-label="关闭"]').click();
+          return ref+'; base64, alignment, proportional resize, undo and settings passed';
+        } finally { await api.request('setImagePasteMode',{mode:prefs.imagePasteMode ?? 'directory'}); }
+
         """#
         host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
             guard let self else { return }

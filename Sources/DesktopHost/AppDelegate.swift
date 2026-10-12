@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let app = submenu("Markdown Studio")
         item(app, "关于 Markdown Studio", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), target: NSApp)
+        item(app, "设置…", ",", command: "settings")
         app.addItem(.separator())
         item(app, "隐藏 Markdown Studio", "h", action: #selector(NSApplication.hide(_:)), target: NSApp)
         item(app, "退出 Markdown Studio", "q", action: #selector(NSApplication.terminate(_:)), target: NSApp)

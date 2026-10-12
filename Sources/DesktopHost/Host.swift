@@ -63,7 +63,10 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
             let result: Any
             switch action {
             case "getPreferences":
-                result = ["sidebarWidth": UserDefaults.standard.object(forKey: "sidebarWidth") as? Int ?? 228]
+                result = ["sidebarWidth": UserDefaults.standard.object(forKey: "sidebarWidth") as? Int ?? 228, "imagePasteMode": UserDefaults.standard.string(forKey: "imagePasteMode") ?? "directory"]
+            case "setImagePasteMode":
+                guard let mode = data["mode"] as? String, ["directory", "base64"].contains(mode) else { throw Self.error("图片粘贴方式无效。") }
+                UserDefaults.standard.set(mode, forKey: "imagePasteMode"); result = true
             case "setSidebarWidth":
                 guard let width = data["width"] as? Int, (180...420).contains(width) else { throw Self.error("侧栏宽度超出范围。") }
                 UserDefaults.standard.set(width, forKey: "sidebarWidth"); result = true
@@ -95,7 +98,7 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
                 result = metadata(includeText: true)
             case "imageURL":
                 guard let path = data["path"] as? String else { throw SourceError.invalidRange }
-                if path.hasPrefix("https://") || path.hasPrefix("http://") { result = path }
+                if path.hasPrefix("https://") || path.hasPrefix("http://") || path.hasPrefix("data:image/") { result = path }
                 else {
                     guard let imageURL = Markdown.resolvedURL(path, base: url?.deletingLastPathComponent()), imageURL.isFileURL else { throw Self.error("无法解析图片位置，请先保存文档。") }
                     let bytes = try Data(contentsOf: imageURL)
@@ -105,11 +108,11 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
             case "chooseImages":
                 let panel = NSOpenPanel(); panel.allowedContentTypes = [.image]; panel.allowsMultipleSelection = true
                 guard panel.runModal() == .OK else { reply(id, NSNull()); return }
-                guard ensureSaved() else { reply(id, NSNull()); return }
+                guard UserDefaults.standard.string(forKey: "imagePasteMode") == "base64" || ensureSaved() else { reply(id, NSNull()); return }
                 result = try panel.urls.map { file in ["name": file.deletingPathExtension().lastPathComponent, "path": try importImage(Data(contentsOf: file), name: file.lastPathComponent)] }
             case "importImage":
                 guard let raw = data["data"] as? String, let bytes = Data(base64Encoded: raw), let name = data["name"] as? String else { throw Self.error("图片数据无效。") }
-                guard ensureSaved() else { reply(id, NSNull()); return }
+                guard UserDefaults.standard.string(forKey: "imagePasteMode") == "base64" || ensureSaved() else { reply(id, NSNull()); return }
                 result = try importImage(bytes, name: name)
             case "openLink":
                 if let path = data["path"] as? String, let target = Markdown.resolvedURL(path, base: url?.deletingLastPathComponent()) { NSWorkspace.shared.open(target) }
@@ -137,18 +140,23 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
     }
     func ensureSaved() -> Bool {
         if url != nil { return true }
-        let alert = NSAlert(); alert.messageText = "先保存文档以确定图片位置"; alert.informativeText = "图片将保存在文档旁的 assets 文件夹。"; alert.addButton(withTitle: "保存文档"); alert.addButton(withTitle: "取消")
+        let alert = NSAlert(); alert.messageText = "先保存文档以确定图片位置"; alert.informativeText = "图片将保存在 Markdown 文件所在目录。"; alert.addButton(withTitle: "保存文档"); alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
         let saved = save(); if saved { event("metadata", metadata()) }; return saved
     }
     func importImage(_ bytes: Data, name: String) throws -> String {
-        guard let url, NSImage(data: bytes) != nil else { throw Self.error("无法读取图片。") }
-        let directory = url.deletingLastPathComponent().appendingPathComponent("assets")
+        guard NSImage(data: bytes) != nil else { throw Self.error("无法读取图片。") }
+        if UserDefaults.standard.string(forKey: "imagePasteMode") == "base64" {
+            let mime = UTType(filenameExtension: (name as NSString).pathExtension)?.preferredMIMEType ?? "image/png"
+            return "data:\(mime);base64,\(bytes.base64EncodedString())"
+        }
+        guard let url else { throw Self.error("请先保存文档。") }
+        let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let ext = (name as NSString).pathExtension.isEmpty ? "png" : (name as NSString).pathExtension
         let filename = "image-\(UUID().uuidString.prefix(8)).\(ext)"
         try bytes.write(to: directory.appendingPathComponent(filename), options: .atomic)
-        return "assets/" + filename
+        return filename
     }
     // 保存基于磁盘字节基线；外部冲突必须由用户选择，不静默覆盖。
     func save(as saveAs: Bool = false) -> Bool {

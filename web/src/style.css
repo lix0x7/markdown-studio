@@ -562,7 +562,6 @@ main {
 .md-image img {
   display: block;
   max-width: 100%;
-  max-height: 440px;
   object-fit: contain;
   border-radius: 8px;
 }
@@ -1173,4 +1172,72 @@ footer svg {
 .table-column-menu [data-disabled] {
   opacity: 0.4;
   cursor: default;
+}
+
+.settings-field {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0;
+}
+.settings-field select {
+  padding: 10px;
+  background: var(--paper);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.image-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+}
+.md-image:hover .image-toolbar,
+.md-image:focus-within .image-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+}
+.image-toolbar button {
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.image-frame {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+.image-frame[data-align="center"] {
+  margin-inline: auto;
+}
+.image-frame[data-align="right"] {
+  margin-left: auto;
+}
+.image-frame img {
+  float: none;
+  height: auto;
+}
+.image-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  color: white;
+  cursor: nwse-resize;
+  opacity: 0;
+  touch-action: none;
+}
+.md-image:hover .image-resize,
+.md-image:focus-within .image-resize {
+  opacity: 1;
 }
