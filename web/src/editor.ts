@@ -285,6 +285,30 @@ class ColumnsWidget extends WidgetType {
           },
         });
         child.parentEditor = owner;
+        child.removeEmptyColumn = () => {
+          // 等当前键盘事件结束后替换结构，保留其他栏原文和比例，并定位到相邻栏。
+          queueMicrotask(() => {
+            if (ui.disposed) return;
+            const contents = ui.children.map((c) =>
+              c.view.state.doc.toString(),
+            );
+            if (contents[i].trim()) return;
+            contents.splice(i, 1);
+            const ratios = ui.block.ratios.filter((_, index) => index !== i);
+            const text =
+              contents.length === 1
+                ? contents[0]
+                : columnMarkup(contents, ratios);
+            const from = ui.block.from;
+            owner.anchorHistory(from);
+            replace(text);
+            const target =
+              contents.length === 1
+                ? from
+                : from + parseColumns(text)[0].columns[Math.max(0, i - 1)].from;
+            owner.jump(target);
+          });
+        };
         panes[i].addEventListener("focusin", () => {
           owner.activeChild = child;
         });
@@ -718,6 +742,7 @@ export type EditorCallbacks = {
 };
 export class MarkdownEditor {
   parentEditor?: MarkdownEditor;
+  removeEmptyColumn?: () => void;
   activeChild?: MarkdownEditor;
   active(): MarkdownEditor {
     return this.activeChild?.view.dom.isConnected
@@ -805,6 +830,19 @@ export class MarkdownEditor {
             return { effects: restoreEndings.of(result) };
           }),
           keymap.of([
+            {
+              key: "Backspace",
+              run: () => {
+                if (
+                  !this.removeEmptyColumn ||
+                  this.view.composing ||
+                  this.view.state.doc.toString().trim()
+                )
+                  return false;
+                this.removeEmptyColumn();
+                return true;
+              },
+            },
             {
               key: "Mod-s",
               run: () => {

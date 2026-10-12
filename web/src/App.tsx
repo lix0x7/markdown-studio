@@ -3,7 +3,7 @@ import {
   undo as undoTableChange,
   redo as redoTableChange,
 } from "@codemirror/commands";
-import { columnMarkup } from "./columns";
+import { columnMarkup, parseColumns } from "./columns";
 import TableDrawer from "./TableDrawer";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -116,8 +116,6 @@ export default function App() {
     [count, setCount] = useState(0),
     [empty, setEmpty] = useState(true),
     [active, setActive] = useState(0);
-  const [columnsDialog, setColumnsDialog] = useState(false);
-  const [columnCount, setColumnCount] = useState(2);
   const tableOwner = useRef<MarkdownEditor | null>(null);
   const [settings, setSettings] = useState(false);
   const [imagePasteMode, setImagePasteMode] = useState("directory");
@@ -327,7 +325,21 @@ export default function App() {
     if (!ed) return;
     try {
       if (name === "columns") {
-        setColumnsDialog(true);
+        const selected = ed.view.state.selection.main;
+        const markup = columnMarkup([
+          ed.view.state.sliceDoc(selected.from, selected.to),
+          "",
+        ]);
+        ed.view.dispatch({
+          changes: {
+            from: selected.from,
+            to: selected.to,
+            insert: "\n\n" + markup + "\n\n",
+          },
+          annotations: isolateHistory.of("full"),
+          userEvent: "input.columns",
+        });
+        ed.jump(selected.from + 2 + parseColumns(markup)[0].columns[0].from);
         return;
       }
       if (name === "new" || name === "open") {
@@ -1074,54 +1086,6 @@ export default function App() {
                 应用
               </button>
             </div>
-          </form>
-        </Modal>
-      )}
-      {columnsDialog && (
-        <Modal
-          title="插入分栏"
-          description="每栏可编辑 Markdown，拖动分隔线调整相邻栏比例。"
-          close={() => setColumnsDialog(false)}
-        >
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const ed = editor.current?.active();
-              if (!ed) return;
-              const selected = ed.view.state.selection.main;
-              const contents = Array.from({ length: columnCount }, (_, i) =>
-                i === 0
-                  ? ed.view.state.sliceDoc(selected.from, selected.to)
-                  : "",
-              );
-              ed.apply([
-                {
-                  from: selected.from,
-                  to: selected.to,
-                  insert: "\n\n" + columnMarkup(contents) + "\n\n",
-                },
-              ]);
-              setColumnsDialog(false);
-            }}
-          >
-            <label className="settings-field">
-              分栏数量
-              <input
-                aria-label="分栏数量"
-                type="number"
-                min="2"
-                max="12"
-                value={columnCount}
-                onChange={(e) =>
-                  setColumnCount(
-                    Math.max(2, Math.min(12, Number(e.target.value) || 2)),
-                  )
-                }
-              />
-            </label>
-            <button className="primary" type="submit">
-              插入分栏
-            </button>
           </form>
         </Modal>
       )}

@@ -425,7 +425,25 @@ final class WebVerification {
         if(!ed.buffer.raw.includes('Inner A nested edit') || (await api.request('ready')).text!==ed.buffer.raw)throw new Error('Nested column edit did not sync');
         ed.undo();await pause();await pause();
         if(ed.view.state.doc.toString()!==nestedSource)throw new Error('Nested column undo failed');
-        return 'Three columns, nested editing, native sync, stable DOM, adjacent resizing, outline, add, unwrap and undo';
+        const selectedText='# Selected\n\nKeep this content';
+        ed.view.focus();ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:selectedText},selection:{anchor:0,head:selectedText.length}});
+        api.command('columns');await pause();await pause();
+        if(document.querySelector('[role="dialog"]') || document.querySelectorAll('.column-pane').length!==2)throw new Error('Columns command did not directly insert two columns');
+        if(ed.active()===ed || !ed.active().view.hasFocus)throw new Error('New columns did not focus first editor');
+        const twoColumns=ed.view.state.doc.toString();
+        let empty=document.querySelectorAll('.column-pane')[1].querySelector('.cm-content');empty.focus();
+        empty.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',code:'Backspace',bubbles:true,cancelable:true}));await pause();await pause();
+        if(document.querySelector('.md-columns') || !ed.view.state.doc.toString().includes(selectedText))throw new Error('Empty column removal did not unwrap pair with content preserved');
+        ed.undo();await pause();await pause();
+        if(ed.view.state.doc.toString()!==twoColumns || document.querySelectorAll('.column-pane').length!==2)throw new Error('Empty column removal undo failed');
+        [...document.querySelectorAll('.columns-toolbar button')].find(b=>b.textContent==='添加分栏').click();await pause();await pause();
+        const threeColumns=ed.view.state.doc.toString().replace('data-ratios="1,1,1"','data-ratios="2,3,4"');
+        ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:threeColumns}});await pause();await pause();
+        empty=document.querySelectorAll('.column-pane')[1].querySelector('.cm-content');empty.focus();
+        empty.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',code:'Backspace',bubbles:true,cancelable:true}));await pause();await pause();
+        if(document.querySelectorAll('.column-pane').length!==2 || !ed.view.state.doc.toString().includes('data-ratios="2,4"') || !ed.view.state.doc.toString().includes(selectedText))throw new Error('Empty middle column removal lost sibling content or ratios');
+        ed.undo();await pause();await pause();if(ed.view.state.doc.toString()!==threeColumns)throw new Error('Three column removal undo failed');
+        return 'Columns editing, drag ratios, one-click pair, empty-column Backspace, pair unwrap, content preservation and undo';
         """#
         host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { [weak self] result in
             guard let self else { return }
