@@ -23,11 +23,15 @@ type ColumnAction =
 export default function TableDrawer({
   table,
   close,
-  apply,
+  onChange,
 }: {
   table: TableModel;
   close: () => void;
-  apply: (rows: string[][], aligns: string[]) => void;
+  onChange: (
+    rows: string[][],
+    aligns: string[],
+    action: "edit" | "undo" | "redo",
+  ) => boolean;
 }) {
   const initial = useMemo<Draft>(
     () => ({
@@ -37,8 +41,9 @@ export default function TableDrawer({
     [table],
   );
   const [draft, setDraft] = useState(initial),
-    [widths, setWidths] = useState<number[]>([]),
-    [discard, setDiscard] = useState(false);
+    [widths, setWidths] = useState<number[]>([]);
+  const sync = useRef(onChange);
+  sync.current = onChange;
   const [selection, setSelection] = useState<GridSelection>({
     columns: CompactSelection.empty(),
     rows: CompactSelection.empty(),
@@ -91,14 +96,11 @@ export default function TableDrawer({
       selection.columns.first() ?? selection.current?.cell[0] ?? 0,
       draft.aligns.length - 1,
     );
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
-  const dismiss = () => {
-    if (dirty) setDiscard(true);
-    else close();
-  };
-  // 所有表格操作只修改抽屉草稿；批量粘贴与行列操作各保存一个历史步骤。
+  const dismiss = close;
+  // 每次单元格提交、批量粘贴和行列操作都同步正文，抽屉只维护交互历史。
   const update = useCallback((next: Draft) => {
     if (JSON.stringify(next) === JSON.stringify(current.current)) return;
+    if (!sync.current(next.rows, next.aligns, "edit")) return;
     const previous = current.current;
     setHistory((h) => [...h, previous].slice(-100));
     setFuture([]);
@@ -108,6 +110,7 @@ export default function TableDrawer({
   const undo = () => {
     if (!history.length) return;
     const previous = history[history.length - 1];
+    if (!sync.current(previous.rows, previous.aligns, "undo")) return;
     const present = current.current;
     setFuture((f) => [present, ...f]);
     setHistory((h) => h.slice(0, -1));
@@ -126,6 +129,7 @@ export default function TableDrawer({
   };
   const redo = () => {
     if (!future.length) return;
+    if (!sync.current(future[0].rows, future[0].aligns, "redo")) return;
     const present = current.current;
     setHistory((h) => [...h, present]);
     current.current = future[0];
@@ -524,27 +528,9 @@ export default function TableDrawer({
           <footer className="table-drawer-footer">
             <span>
               {draft.rows.length} 行 × {draft.aligns.length} 列
-              {dirty ? " · 未应用修改" : ""}
+              {" · 实时同步正文"}
             </span>
-            {discard ? (
-              <>
-                <span role="alert">放弃本次表格修改？</span>
-                <button onClick={() => setDiscard(false)}>继续编辑</button>
-                <button onClick={close}>放弃修改</button>
-              </>
-            ) : (
-              <>
-                <button onClick={dismiss}>取消</button>
-                <button
-                  className="primary"
-                  onClick={() =>
-                    apply(current.current.rows, current.current.aligns)
-                  }
-                >
-                  应用修改
-                </button>
-              </>
-            )}
+            <button onClick={close}>关闭</button>
           </footer>
           <Dropdown.Root
             open={columnMenu !== null}

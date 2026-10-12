@@ -1,3 +1,8 @@
+import {
+  isolateHistory,
+  undo as undoTableChange,
+  redo as redoTableChange,
+} from "@codemirror/commands";
 import TableDrawer from "./TableDrawer";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -139,6 +144,11 @@ export default function App() {
     [language, setLanguage] = useState("text");
   const target = useRef({ from: 0, to: 0, image: false });
   const [table, setTable] = useState<TableModel | null>(null);
+  const tableSync = useRef<{ source: TableModel; current: TableModel } | null>(
+    null,
+  );
+  if (table && tableSync.current?.source !== table)
+    tableSync.current = { source: table, current: table };
   const statTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -272,7 +282,7 @@ export default function App() {
       }
       return;
     }
-    if (table) {
+    if (table && !["save", "saveAs"].includes(name)) {
       if (name === "undo" || name === "redo")
         window.dispatchEvent(
           new CustomEvent("table-command", { detail: name }),
@@ -1019,17 +1029,34 @@ export default function App() {
         <TableDrawer
           table={table}
           close={() => setTable(null)}
-          apply={(rows, aligns) => {
+          onChange={(rows, aligns, action) => {
             const ed = editor.current;
-            if (!ed) return;
+            const session = tableSync.current;
+            if (!ed || !session) return false;
+            const current = session.current;
             if (
-              ed.view.state.sliceDoc(table.from, table.to) !== table.original
+              ed.view.state.sliceDoc(current.from, current.to) !==
+              current.original
             ) {
               setError("正文中的表格已变化，请重新打开表格编辑器。");
-              return;
+              return false;
             }
-            ed.apply(tablePatches(table, rows, aligns));
-            setTable(null);
+            const length = ed.view.state.doc.length;
+            // 独立事务使表格撤销恢复原始格式，同时不抢走网格输入焦点。
+            if (action === "undo") undoTableChange(ed.view);
+            else if (action === "redo") redoTableChange(ed.view);
+            else
+              ed.view.dispatch({
+                changes: tablePatches(current, rows, aligns),
+                annotations: isolateHistory.of("full"),
+                userEvent: "input.table",
+              });
+            const end = current.to + ed.view.state.doc.length - length;
+            session.current = parseTable(
+              ed.view.state.sliceDoc(current.from, end),
+              current.from,
+            )!;
+            return true;
           }}
         />
       )}

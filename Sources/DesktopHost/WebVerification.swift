@@ -176,25 +176,26 @@ final class WebVerification {
           check(descending.getData('text/plain')===pasted,'Descending sort keeps empty values last');
           api.command('undo');await nextFrame();api.command('undo');await nextFrame();api.command('undo');await nextFrame();
           check(drawer.querySelector('.table-drawer-footer').textContent.includes('2 行 × 2 列'),'Paste and sorts each undo in one step');
-          check(ed.buffer.raw===saved,'Clipboard and sorting leave source untouched until apply');
+          check(ed.buffer.raw===saved,'Undo of clipboard and sorting restores original source');
         } finally {
           if(clipboardDescriptor) Object.defineProperty(navigator,'clipboard',clipboardDescriptor);
           else delete navigator.clipboard;
         }
         setCell('renamed');await nextFrame();
-        check(ed.buffer.raw===saved,'Table draft edits do not modify document before applying');
+        check(ed.buffer.raw===saved.replace('| a  |','| renamed  |'),'Table cell edits immediately sync to source');
+        check((await api.request('ready')).text===ed.buffer.raw,'Live table edit reaches native document');
         api.command('undo');await nextFrame();
-        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='a','Table undo is isolated from document');
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='a','Table undo restores cell');
         api.command('redo');await nextFrame();
         check(document.querySelector('input[aria-label="当前单元格内容"]').value==='renamed','Table redo restores draft cell');
-        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='应用修改').click();await nextFrame();
-        check(ed.buffer.raw===saved.replace('| a  |','| renamed  |'),'Applying Glide edits changes only selected Markdown cell');
+        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='关闭').click();await nextFrame();
+        check(ed.buffer.raw===saved.replace('| a  |','| renamed  |'),'Closing table retains synchronized cell changes');
         ed.undo();check(ed.buffer.raw===saved,'Applied table changes undo as one document edit');
         ed.view.dispatch({selection:{anchor:tableStart+2}});api.command('table');await nextFrame();await nextFrame();
-        setCell('discarded');await nextFrame();drawer=document.querySelector('.table-drawer');
-        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='取消').click();await nextFrame();
-        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='放弃修改').click();await nextFrame();
-        check(ed.buffer.raw===saved && !document.querySelector('.table-drawer'),'Discarding table draft preserves original source');
+        setCell('live');await nextFrame();drawer=document.querySelector('.table-drawer');
+        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='关闭').click();await nextFrame();
+        check(ed.buffer.raw===saved.replace('| a  |','| live  |') && !document.querySelector('.table-drawer'),'Closing live table requires no apply or discard confirmation');
+        ed.undo();check(ed.buffer.raw===saved,'Document undo reverses live table edit after close');
         const preferences=await api.request('getPreferences');
         try {
           const separator=document.querySelector('[role="separator"][aria-label="调整文档大纲宽度"]');
