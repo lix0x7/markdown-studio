@@ -19,6 +19,7 @@ import {
   LinkSimple,
   Image,
   Table,
+  Columns,
   Code,
   ArrowSquareOut,
   CaretDown,
@@ -882,7 +883,7 @@ export default function App() {
               <Table />
             </Tool>
             <Tool label="插入分栏" onClick={() => void command("columns")}>
-              <span>分栏</span>
+              <Columns />
             </Tool>
             <Tool label="代码块与语言" onClick={() => void command("code")}>
               <Code />
