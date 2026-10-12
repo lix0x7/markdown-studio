@@ -96,6 +96,11 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
             case "save", "saveAs": result = save(as: action == "saveAs") ? metadata() : NSNull()
             case "new": onNew?(); result = NSNull()
             case "open": onOpen?(); result = NSNull()
+            case "openDroppedDocuments":
+                // WKWebView 内部内容视图可能直接接收拖放，由前端捕获后转回原生文件打开流程。
+                let urls = (data["urls"] as? [String] ?? []).compactMap { URL(string: $0) }
+                guard web.openDroppedDocuments(urls: urls) || web.openDroppedDocuments(from: NSPasteboard(name: .drag)) else { throw Self.error("无法识别拖入文件的路径，请通过“打开文件”选择该文件。") }
+                result = true
             case "reload":
                 if dirty {
                     let alert = NSAlert(); alert.messageText = "重新载入并丢弃未保存的修改？"; alert.addButton(withTitle: "取消"); alert.addButton(withTitle: "重新载入")

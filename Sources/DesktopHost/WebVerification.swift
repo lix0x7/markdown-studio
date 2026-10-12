@@ -270,7 +270,7 @@ final class WebVerification {
                     guard data == SourceFile(text: self.original.replacingOccurrences(of: "plain", with: "**plain**"), encoding: .utf8BOM).data else { self.fail("Byte fidelity mismatch"); return }
                     print("PASS: Saved bytes differ only at selected text and retain BOM")
                     try self.verifyDocumentDrop()
-                    self.benchmark()
+                    self.verifyWebDocumentDrop()
                 } catch { self.fail(String(describing: (error as NSError).userInfo)) }
             }
         }
@@ -304,6 +304,39 @@ final class WebVerification {
         board.writeObjects([root.appendingPathComponent("image.png").absoluteURL as NSURL])
         guard !host.web.openDroppedDocuments(from: board) else { throw Host.error("Image drop intercepted") }
         print("PASS: Native document drop opens separate document hosts and preserves current text; images fall through")
+    }
+    func verifyWebDocumentDrop() {
+        guard let host else { return }
+        let before = host.source.data
+        var opened: [Host] = []
+        var failure: Error?
+        host.web.onOpenDocuments = { urls in
+            do { for url in urls { opened.append(try Host(url: url, recovery: host.recovery)) } }
+            catch { failure = error }
+        }
+        let script = #"""
+        const ed=window.editorAPI.editor, before=ed.buffer.raw;
+        const data=new DataTransfer();
+        data.items.add(new File(['# Dragged contents'], 'dragged.md', {type:'text/plain'}));
+        data.setData('text/plain','# This must not enter the current document');
+        data.setData('text/uri-list',fileURL);
+        const event=new DragEvent('drop',{dataTransfer:data,bubbles:true,cancelable:true});
+        ed.view.contentDOM.dispatchEvent(event);
+        await new Promise(r=>setTimeout(r,300));
+        if(!event.defaultPrevented || ed.buffer.raw!==before)throw new Error('Document drop inserted text into current editor');
+        return true;
+        """#
+        host.web.callAsyncJavaScript(script, arguments: ["fileURL": root.appendingPathComponent("拖入文档.MD").absoluteURL.absoluteString], in: nil, in: .page) { [weak self] result in
+            defer { host.web.onOpenDocuments = nil; opened.forEach { $0.close() } }
+            guard let self else { return }
+            switch result {
+            case .failure(let error): self.fail(String(describing: (error as NSError).userInfo))
+            case .success:
+                guard failure == nil, opened.count == 1, opened[0].source.text == "# 拖入文档\n", opened[0].window !== host.window, host.source.data == before else { self.fail("Web file drop did not open a separate document host"); return }
+                print("PASS: DOM file drop with text fallback opens a separate document and leaves current source unchanged")
+                self.benchmark()
+            }
+        }
     }
     func benchmark() {
         let text = String(repeating: "# Heading\n\nA paragraph with **bold**, 中文 and `code`.  \n\n```js\nconst x = 42;\n```\n\n", count: 13000)

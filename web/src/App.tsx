@@ -564,6 +564,37 @@ export default function App() {
       window.removeEventListener("native:external", ext);
     };
   }, []);
+  // 在 CodeMirror 的默认 drop 处理之前接管文件，避免其读取文件文本并插入当前文档。
+  useEffect(() => {
+    if (!isNative) return;
+    const dragOver = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes("Files")) event.preventDefault();
+    };
+    const drop = (event: DragEvent) => {
+      const data = event.dataTransfer;
+      if (!data) return;
+      const urls = data
+        .getData("text/uri-list")
+        .split(/\r?\n/)
+        .filter((url) => /^file:.*\.(md|markdown|txt)$/i.test(url.trim()))
+        .map((url) => url.trim());
+      const files = Array.from(data.files).filter((file) =>
+        /\.(md|markdown|txt)$/i.test(file.name),
+      );
+      if (!files.length && !urls.length) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void request("openDroppedDocuments", { urls }).catch((e) =>
+        setError(e.message),
+      );
+    };
+    window.addEventListener("dragover", dragOver, true);
+    window.addEventListener("drop", drop, true);
+    return () => {
+      window.removeEventListener("dragover", dragOver, true);
+      window.removeEventListener("drop", drop, true);
+    };
+  }, []);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 3500);

@@ -26,9 +26,13 @@ final class DocumentWebView: WKWebView {
     }
 
     func openDroppedDocuments(from pasteboard: NSPasteboard) -> Bool {
-        let urls = documentURLs(pasteboard)
-        guard !urls.isEmpty, let onOpenDocuments else { return false }
-        onOpenDocuments(urls)
+        openDroppedDocuments(urls: documentURLs(pasteboard))
+    }
+
+    func openDroppedDocuments(urls: [URL]) -> Bool {
+        let documents = urls.filter { $0.isFileURL && ["md", "markdown", "txt"].contains($0.pathExtension.lowercased()) && !$0.hasDirectoryPath }
+        guard !documents.isEmpty, let onOpenDocuments else { return false }
+        onOpenDocuments(documents)
         return true
     }
 
