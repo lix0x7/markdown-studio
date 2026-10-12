@@ -184,3 +184,22 @@ describe("additional editor invariants", () => {
     expect(disk()).toBe("start  \r\n  - **nested**\r\nlast");
   });
 });
+
+describe("unordered list presentation", () => {
+  it("renders bullet markers while preserving nested source and ordered lists", () => {
+    const raw =
+      "- first\r\n  - nested\r\n+ second\r\n* third\r\n\r\n1. ordered\r\n\r\n```text\r\n- code\r\n```";
+    const { ed, disk } = create(raw);
+    expect(
+      [...ed.view.dom.querySelectorAll(".md-bullet-mark")].map(
+        (el) => el.textContent,
+      ),
+    ).toEqual(["-", "-", "+", "*"]);
+    expect(disk()).toBe(raw);
+    ed.toggle();
+    expect(ed.view.dom.querySelector(".md-bullet-mark")).toBeNull();
+    expect(disk()).toBe(raw);
+    ed.toggle();
+    expect(ed.view.dom.querySelectorAll(".md-bullet-mark")).toHaveLength(4);
+  });
+});

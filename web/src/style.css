@@ -1005,3 +1005,21 @@ footer svg {
   border-right: 2px solid var(--accent);
   outline: none;
 }
+
+/* 圆点覆盖原始列表符号，不改变行高、缩进或 Markdown 源文本。 */
+.md-bullet-mark {
+  position: relative;
+  color: transparent !important;
+}
+.md-bullet-mark::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

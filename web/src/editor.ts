@@ -215,6 +215,10 @@ function buildDecorations(
         mark(from, to, "md-invisible");
         return false;
       }
+      // 仅装饰无序列表标记，保留原字符宽度和文本坐标，避免影响点击及选区。
+      if (name === "ListMark" && /^[-+*]$/.test(state.sliceDoc(from, to))) {
+        mark(from, to, "md-bullet-mark");
+      }
       if (name === "StrongEmphasis") mark(from, to, "md-strong");
       if (name === "Emphasis") mark(from, to, "md-em");
       if (name === "Strikethrough") mark(from, to, "md-strike");
