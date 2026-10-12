@@ -511,6 +511,21 @@ final class WebVerification {
           if(document.querySelector('figcaption') || !document.querySelector('.md-image img'))throw new Error('Clearing caption removed image or retained caption');
           ed.undo();await frame();await frame();
           if(ed.buffer.raw!==withCaption)throw new Error('Caption removal undo failed');
+          const imageBeforeWrap=ed.view.state.doc.toString();
+          const longURL='data:image/png;base64,'+'A'.repeat(8192);
+          for(const reference of ['![inline]('+longURL+')','<img src="'+longURL+'" alt="inline">','<figure><img src="'+longURL+'"><figcaption>说明</figcaption></figure>']) {
+            const fixture=reference+'\n\n'+('正文继续自动换行。'.repeat(80));
+            ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:fixture},selection:{anchor:10},scrollIntoView:true});await frame();await frame();
+            for(const sourceMode of [false,true]) {
+              if(ed.sourceMode!==sourceMode){ed.toggle();await frame();await frame();}
+              const line=ed.view.contentDOM.querySelector('.md-base64-line');
+              if(!line || getComputedStyle(line).whiteSpace!=='pre' || line.scrollWidth<=line.clientWidth || line.getBoundingClientRect().height>60)throw new Error('Base64 image source is wrapping or cannot scroll');
+              line.scrollLeft=200;if(line.scrollLeft<100)throw new Error('Base64 line horizontal scroll failed');
+              if(ed.view.scrollDOM.scrollWidth>ed.view.scrollDOM.clientWidth+2)throw new Error('Base64 source widened whole editor');
+              if(ed.view.state.doc.toString()!==fixture)throw new Error('Base64 display changed source');
+            }
+          }
+          ed.toggle();ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:imageBeforeWrap},selection:{anchor:0},scrollIntoView:true});await frame();await frame();
           api.command('settings');await frame();
           if(!document.querySelector('.settings-field select'))throw new Error('Global settings panel missing');
           if(document.querySelector('[role="dialog"] select[aria-label="页面宽度"]'))throw new Error('Page width still in global settings');

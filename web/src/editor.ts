@@ -803,6 +803,42 @@ const previewViewport = ViewPlugin.fromClass(
     }
   },
 );
+// Base64 图片源码按行横向滚动；独立于预览扩展，源码模式和分栏内同样生效。
+const base64ImageLines = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = this.build(view);
+    }
+    update(update: import("@codemirror/view").ViewUpdate) {
+      if (update.docChanged || update.viewportChanged)
+        this.decorations = this.build(update.view);
+    }
+    build(view: EditorView) {
+      const lines = new Set<number>();
+      const decorations: Range<Decoration>[] = [];
+      for (const range of view.visibleRanges) {
+        for (let pos = range.from; pos <= range.to;) {
+          const line = view.state.doc.lineAt(pos);
+          if (
+            !lines.has(line.from) &&
+            /(?:!\[[^\]]*\]\(\s*<?|<img\b[^>]*\bsrc\s*=\s*["'])data:image\/[^,\s]+;base64,/i.test(
+              line.text,
+            )
+          ) {
+            decorations.push(
+              Decoration.line({ class: "md-base64-line" }).range(line.from),
+            );
+          }
+          lines.add(line.from);
+          pos = line.to + 1;
+        }
+      }
+      return Decoration.set(decorations, true);
+    }
+  },
+  { decorations: (plugin) => plugin.decorations },
+);
 const preview: Extension = [previewField, previewViewport];
 const restoreEndings = StateEffect.define<string[]>();
 // 撤销历史保存换行元数据，让混合 CRLF/LF 的跨行删除也可精确恢复。
@@ -977,6 +1013,7 @@ export class MarkdownEditor {
             indentWithTab,
           ]),
           EditorView.lineWrapping,
+          base64ImageLines,
           EditorView.contentAttributes.of({
             "aria-label": "Markdown 编辑区",
             spellcheck: "false",

@@ -1352,3 +1352,13 @@ footer svg {
 .image-caption-editor button {
   padding: 6px 10px;
 }
+
+/* Base64 图片仅让当前源码行横向滚动，避免挤宽正文和相邻分栏。 */
+.cm-editor .cm-line.md-base64-line {
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  overflow-x: auto;
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
