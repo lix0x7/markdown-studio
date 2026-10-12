@@ -1,6 +1,55 @@
-# Typora Native
+# Markdown Studio
 
-使用 Swift + AppKit 实现的 macOS 原生 Markdown 编辑器。文件、编辑器、表格窗口、大纲、查找替换和打印均使用原生控件；无 Electron 或浏览器编辑器依赖。
+面向 macOS 的本地 Markdown 编辑器，采用 Swift + AppKit / WKWebView 宿主与 React + CodeMirror 6 编辑界面。支持同区域编辑与预览、可视化表格、多分栏及 HTML / PDF 导出。当前构建和实现说明见 [DEVELOPMENT.md](DEVELOPMENT.md)；项目早期名称为 Typora Native。
+
+## 与 Typora、CommonMark 的区别
+
+Typora 是 Markdown 编辑器产品，CommonMark 是 Markdown 的语法与解析规范；本项目是可在本地构建、按需求修改的编辑器应用。因此，与 Typora 比较的是编辑体验和功能范围，与 CommonMark 比较的是语法兼容性。CommonMark 本身不规定窗口、快捷键、文件保存或表格编辑界面。参见 [Typora 官网](https://typora.io/) 与 [CommonMark 规范](https://spec.commonmark.org/)。
+
+### 与 Typora：同区域写作，侧重表格与分栏交互
+
+| 维度 | Markdown Studio（当前实现） | Typora |
+| --- | --- | --- |
+| 编辑方式 | CodeMirror 保存 Markdown 源文，通过装饰和组件实现实时排版，可切换源码模式 | 提供实时预览和源码模式，隐藏或按编辑状态展开 Markdown 标记 |
+| 表格编辑 | 通过 Glide Data Grid 抽屉编辑：F2、区域复制粘贴、行列多选、增删与移动、排序；变更实时同步正文 | 提供可视化表格编辑、对齐，以及行列增删等操作 |
+| 多分栏 | 支持栏内完整 Markdown 编辑、嵌套分栏和拖动分隔线调整相邻栏比例；使用本项目的 `div + md` 扩展语法 | 官方 Markdown 参考未定义本项目的分栏语法，不能假设会还原相同布局与编辑交互 |
+| 内容保存 | 使用局部文本补丁，保留未修改区域的原始格式、文件编码和换行；结构操作限定在相应表格或分栏范围内 | 同样以 Markdown 文件为载体；此处不对其内部存储、序列化或字节保持策略作推断 |
+| 功能范围 | 当前重点是本地写作、表格、图片和分栏，支持 HTML / PDF 导出；公式、Mermaid 尚未实现 | 官方列有数学公式、图表、主题及更多导入导出能力 |
+| 运行范围 | 当前交付 macOS 应用，使用 WKWebView；浏览器模式用于开发预览 | 提供 macOS、Windows 和 Linux 版本 |
+
+Typora 也具备可视化表格和实时预览，本项目的区别主要在具体交互与可定制实现，不代表这些能力是本项目独有，也不代表已经覆盖 Typora 的全部功能。对比依据：[Typora Markdown 参考](https://support.typora.io/Markdown-Reference/)及[官网功能介绍](https://typora.io/)（核对日期：2026-10-12）。
+
+### 与 CommonMark：基础 Markdown、扩展语法和应用行为分开看
+
+| 内容 | 本项目的处理方式 | 与 CommonMark 的关系 |
+| --- | --- | --- |
+| 标题、段落、强调、引用、列表、链接、图片、代码块 | 基于 CodeMirror Markdown 解析进行编辑；组件展示及导出使用 marked，并通过 DOMPurify 清理 HTML | 属于基础 Markdown 范围，但本项目尚未完成完整 CommonMark 一致性测试，不承诺所有边界情况完全一致 |
+| 管道表格、删除线等 | 支持相应编辑或展示能力，HTML 渲染启用 marked 的 GFM 模式 | 属于 GFM 等扩展，不属于 CommonMark 核心；启用 GFM 也不等于整个编辑器已通过 GFM 一致性验证 |
+| 多分栏 | 识别 `div.columns` 下的 `<md>`，渲染其内部 Markdown，按 `data-ratios` 排列栏宽 | 本项目自定义扩展；CommonMark 不定义 `<md>` 的递归 Markdown 渲染或分栏行为 |
+| 图片对齐与尺寸 | 使用 HTML `img` 属性保存，提供悬浮对齐工具和等比例缩放 | HTML 可以作为文档内容，但具体布局与可视化调整不由 CommonMark 规定，外部渲染器也可能过滤属性 |
+| 页面宽度、表格列宽与文件操作 | 页面宽度按本机文档记忆，网格列宽用于编辑；拖入文档通过窗口打开 | 属于应用行为，不是 Markdown 语法，不会因复制 Markdown 文件而自动获得相同配置 |
+
+CommonMark 定义了原始 HTML 的解析规则，但不能据此认为 HTML 标签内部的文本一定会再次作为 Markdown 解析。本项目会先识别分栏结构，再分别解析各栏内容。例如：
+
+```html
+<div class="columns" data-ratios="2,1">
+<md>
+## 左栏
+
+这里可以写 **Markdown**。
+</md>
+<md>
+## 右栏
+
+- 支持列表
+- 支持独立编辑
+</md>
+</div>
+```
+
+这段内容在本项目中显示为 2:1 的两栏；直接交给 Typora、GitHub 或普通 CommonMark 渲染器，不保证得到相同效果。向外分享时，优先使用双方支持的 Markdown 语法；需要保留分栏展示时，可以导出 HTML / PDF。HTML 导出会将分栏转换为 CSS Grid，但不会附带本应用的编辑交互。
+
+规范参考：[CommonMark](https://spec.commonmark.org/)、[GitHub Flavored Markdown](https://github.github.com/gfm/)。
 
 ## 典型截图
 
@@ -30,7 +79,9 @@
 
 ![Markdown Studio 表格编辑弹窗：单元格网格、行列操作与对齐选项](docs/screenshots/table-editor.jpg)
 
-## 运行
+## 运行（早期纯 AppKit 版本）
+
+> 从本节到“实现边界”保留早期实现记录，不适用于当前前端重写版。当前运行方式、编辑模型和验证命令以 [DEVELOPMENT.md](DEVELOPMENT.md) 为准。
 
 环境：macOS 13+、Swift 6 / Xcode 16+。本次已在 macOS 15.6.1、Apple Silicon、Xcode 26.3 上构建验证。
 
