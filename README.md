@@ -2,6 +2,28 @@
 
 使用 Swift + AppKit 实现的 macOS 原生 Markdown 编辑器。文件、编辑器、表格窗口、大纲、查找替换和打印均使用原生控件；无 Electron 或浏览器编辑器依赖。
 
+## 典型截图
+
+以下为当前 **Markdown Studio 前端重写版**的 macOS 应用实拍，采用 React + CodeMirror 6 + Radix，运行在原生 WKWebView 宿主中。当前构建与启动方法见 [DEVELOPMENT.md](DEVELOPMENT.md)，验收记录见 [VALIDATION.md](VALIDATION.md)；下方原有章节保留的是早期纯 AppKit 版本说明。
+
+### 写作与文档大纲
+
+在同一区域输入和预览 Markdown，左侧大纲用于定位标题，顶部提供格式操作、保存和导出。
+
+![Markdown Studio 写作界面：文档大纲、实时排版、格式工具栏和表格预览](docs/screenshots/writing.jpg)
+
+### Markdown 源码模式
+
+随时切换到源码模式，查看并直接编辑标题、行内格式、表格与围栏代码的原始语法。
+
+![Markdown Studio 源码模式：Markdown 标记、表格源码与代码高亮](docs/screenshots/source.jpg)
+
+### 可视化表格编辑
+
+通过网格修改单元格，增删行列和设置对齐；支持 Tab / Shift-Tab 连续编辑。
+
+![Markdown Studio 表格编辑弹窗：单元格网格、行列操作与对齐选项](docs/screenshots/table-editor.jpg)
+
 ## 运行
 
 环境：macOS 13+、Swift 6 / Xcode 16+。本次已在 macOS 15.6.1、Apple Silicon、Xcode 26.3 上构建验证。
