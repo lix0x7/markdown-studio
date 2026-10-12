@@ -805,22 +805,49 @@ export default function App() {
             </small>
           </div>
           <div className="top-actions">
-            <select
-              className="export-button"
-              aria-label="页面宽度"
-              title="当前文档的页面宽度"
-              value={pageWidth}
-              onChange={(e) => {
-                const mode = e.target.value;
-                void request("setPageWidth", { mode })
-                  .then(() => setPageWidth(mode))
-                  .catch((e) => setError(e.message));
-              }}
-            >
-              <option value="default">标准宽度</option>
-              <option value="wide">较宽（默认）</option>
-              <option value="full">全宽</option>
-            </select>
+            <Menu.Root>
+              <Menu.Trigger
+                className="export-button"
+                aria-label="页面宽度"
+                title="当前文档的页面宽度"
+              >
+                {
+                  { default: "标准宽度", wide: "较宽（默认）", full: "全宽" }[
+                    pageWidth
+                  ]
+                }
+                <CaretDown />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Content className="menu" align="end" sideOffset={8}>
+                  <Menu.RadioGroup
+                    value={pageWidth}
+                    onValueChange={(mode) => {
+                      void request("setPageWidth", { mode })
+                        .then(() => setPageWidth(mode))
+                        .catch((e) => setError(e.message));
+                    }}
+                  >
+                    {[
+                      ["default", "标准宽度"],
+                      ["wide", "较宽（默认）"],
+                      ["full", "全宽"],
+                    ].map(([value, label]) => (
+                      <Menu.RadioItem
+                        key={value}
+                        value={value}
+                        data-page-width-option={value}
+                      >
+                        {label}
+                        <Menu.ItemIndicator className="menu-check">
+                          <Check />
+                        </Menu.ItemIndicator>
+                      </Menu.RadioItem>
+                    ))}
+                  </Menu.RadioGroup>
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu.Root>
             <button
               className="save-button"
               onClick={() => void command("save")}

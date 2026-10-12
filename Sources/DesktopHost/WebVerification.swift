@@ -574,22 +574,24 @@ final class WebVerification {
           if(!document.querySelector('.settings-field select'))throw new Error('Global settings panel missing');
           if(document.querySelector('[role="dialog"] select[aria-label="页面宽度"]'))throw new Error('Page width still in global settings');
           document.querySelector('[aria-label="关闭"]').click();await frame();
-          const widthSelect=document.querySelector('select[aria-label="页面宽度"]');
-          if(!widthSelect || widthSelect.options.length!==3)throw new Error('Page width options missing');
+          const widthSelect=document.querySelector('button[aria-label="页面宽度"]');
+          if(!widthSelect)throw new Error('Page width menu missing');
           const app=document.querySelector('.app'), oldWidth=app.style.width, sourceBeforeWidth=ed.buffer.raw;
           app.style.width='1700px';
           try {
             const widths=[];
             for(const mode of ['default','wide','full']) {
-              Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(widthSelect,mode);
-              widthSelect.dispatchEvent(new Event('change',{bubbles:true}));await frame();await frame();
+              widthSelect.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));await frame();
+              const options=document.querySelectorAll('[data-page-width-option]');
+              if(options.length!==3)throw new Error('Page width options missing');
+              document.querySelector('[data-page-width-option="'+mode+'"]').click();await frame();await frame();
               if((await api.request('ready')).pageWidth!==mode || app.dataset.pageWidth!==mode)throw new Error('Page width did not persist or apply: '+mode);
               widths.push(ed.view.contentDOM.getBoundingClientRect().width);
             }
             if(Math.abs(widths[0]-796)>1 || Math.abs(widths[1]-1100)>1 || widths[2]<=widths[1])throw new Error('Page widths incorrect: '+widths);
             if(ed.buffer.raw!==sourceBeforeWidth)throw new Error('Page width changed document content');
             await api.request('setPageWidth',{mode:'default'});await frame();
-            if(app.dataset.pageWidth!=='default' || widthSelect.value!=='default')throw new Error('Native preference broadcast not applied');
+            if(app.dataset.pageWidth!=='default' || widthSelect.textContent!=='标准宽度')throw new Error('Native preference broadcast not applied');
           } finally {
             app.style.width=oldWidth;
             await api.request('setPageWidth',{mode:docPrefs.pageWidth ?? 'wide'});await frame();

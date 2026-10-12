@@ -298,10 +298,6 @@ main {
   width: 15px;
   height: 15px;
 }
-.export-button {
-  border: 1px solid var(--line);
-  background: var(--paper);
-}
 .export-button svg {
   width: 12px;
 }
@@ -685,7 +681,8 @@ footer svg {
   z-index: 30;
   color: var(--text);
 }
-.menu [role="menuitem"] {
+.menu [role="menuitem"],
+.menu [role="menuitemradio"] {
   font-size: 12px;
   min-height: 33px;
   padding: 0 9px;
@@ -695,6 +692,10 @@ footer svg {
   outline: 0;
   cursor: pointer;
   border-radius: 5px;
+}
+.menu-check {
+  margin-left: auto;
+  display: flex;
 }
 .menu [data-highlighted] {
   background: var(--accent-soft);
