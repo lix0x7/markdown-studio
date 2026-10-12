@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import DataEditor, {
   GridCellKind,
@@ -16,6 +17,7 @@ import {
 import type { TableModel } from "./source";
 
 type Draft = { rows: string[][]; aligns: string[] };
+type ColumnAction = "before" | "after" | "delete" | "left" | "right";
 export default function TableDrawer({
   table,
   close,
@@ -38,7 +40,17 @@ export default function TableDrawer({
   const [selection, setSelection] = useState<GridSelection>({
     columns: CompactSelection.empty(),
     rows: CompactSelection.empty(),
+    current: {
+      cell: [0, 0],
+      range: { x: 0, y: 0, width: 1, height: 1 },
+      rangeStack: [],
+    },
   });
+  const [columnMenu, setColumnMenu] = useState<{
+    column: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const [history, setHistory] = useState<Draft[]>([]),
     [future, setFuture] = useState<Draft[]>([]);
   const current = useRef(draft);
@@ -64,8 +76,14 @@ export default function TableDrawer({
     if (root) observer.observe(root);
     return () => observer.disconnect();
   }, [root]);
-  const row = Math.min(selection.current?.cell[1] ?? 0, draft.rows.length - 1),
-    column = Math.min(selection.current?.cell[0] ?? 0, draft.aligns.length - 1);
+  const row = Math.min(
+      selection.rows.first() ?? selection.current?.cell[1] ?? 0,
+      draft.rows.length - 1,
+    ),
+    column = Math.min(
+      selection.columns.first() ?? selection.current?.cell[0] ?? 0,
+      draft.aligns.length - 1,
+    );
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
   const dismiss = () => {
     if (dirty) setDiscard(true);
@@ -88,9 +106,15 @@ export default function TableDrawer({
     setHistory((h) => h.slice(0, -1));
     current.current = previous;
     setDraft(previous);
+    setWidths([]);
     setSelection({
       columns: CompactSelection.empty(),
       rows: CompactSelection.empty(),
+      current: {
+        cell: [0, 0],
+        range: { x: 0, y: 0, width: 1, height: 1 },
+        rangeStack: [],
+      },
     });
   };
   const redo = () => {
@@ -99,10 +123,16 @@ export default function TableDrawer({
     setHistory((h) => [...h, present]);
     current.current = future[0];
     setDraft(future[0]);
+    setWidths([]);
     setFuture((f) => f.slice(1));
     setSelection({
       columns: CompactSelection.empty(),
       rows: CompactSelection.empty(),
+      current: {
+        cell: [0, 0],
+        range: { x: 0, y: 0, width: 1, height: 1 },
+        rangeStack: [],
+      },
     });
   };
   useEffect(() => {
@@ -130,6 +160,7 @@ export default function TableDrawer({
       draft.aligns.map((_, i) => ({
         id: String(i),
         title: "列 " + (i + 1),
+        hasMenu: true,
         width: widths[i] ?? 200,
       })),
     [draft.aligns, widths],
@@ -155,8 +186,71 @@ export default function TableDrawer({
     setSelection({
       columns: CompactSelection.empty(),
       rows: CompactSelection.empty(),
+      current: {
+        cell: [0, 0],
+        range: { x: 0, y: 0, width: 1, height: 1 },
+        rangeStack: [],
+      },
     });
   };
+  // 列结构变更同时移动表头、数据、对齐和列宽，并保留操作后的选中位置。
+  const moveColumn = (from: number, to: number) => {
+    if (from === to) return;
+    const order = draft.aligns.map((_, i) => i);
+    order.splice(to, 0, order.splice(from, 1)[0]);
+    update({
+      rows: draft.rows.map((r) => order.map((i) => r[i])),
+      aligns: order.map((i) => draft.aligns[i]),
+    });
+    setWidths(order.map((i) => widths[i] ?? 200));
+    setSelection({
+      columns: CompactSelection.fromSingleSelection(to),
+      rows: CompactSelection.empty(),
+    });
+  };
+  const changeColumn = (action: ColumnAction, at = column) => {
+    setColumnMenu(null);
+    if (action === "left" || action === "right") {
+      moveColumn(at, at + (action === "left" ? -1 : 1));
+      return;
+    }
+    const index = action === "after" ? at + 1 : at;
+    const rows = draft.rows.map((r) => [...r]),
+      aligns = [...draft.aligns];
+    const nextWidths = draft.aligns.map((_, i) => widths[i] ?? 200);
+    if (action === "delete") {
+      rows.forEach((r) => r.splice(index, 1));
+      aligns.splice(index, 1);
+      nextWidths.splice(index, 1);
+    } else {
+      rows.forEach((r) => r.splice(index, 0, ""));
+      aligns.splice(index, 0, "left");
+      nextWidths.splice(index, 0, 200);
+    }
+    update({ rows, aligns });
+    setWidths(nextWidths);
+    setSelection({
+      columns: CompactSelection.fromSingleSelection(
+        Math.min(index, aligns.length - 1),
+      ),
+      rows: CompactSelection.empty(),
+    });
+  };
+  const columnActions: {
+    action: ColumnAction;
+    label: string;
+    disabled: boolean;
+  }[] = [
+    { action: "before", label: "左侧插入列", disabled: false },
+    { action: "after", label: "右侧插入列", disabled: false },
+    { action: "delete", label: "删除列", disabled: draft.aligns.length === 1 },
+    { action: "left", label: "左移列", disabled: column === 0 },
+    {
+      action: "right",
+      label: "右移列",
+      disabled: column === draft.aligns.length - 1,
+    },
+  ];
   return (
     <Dialog.Root
       open
@@ -182,7 +276,8 @@ export default function TableDrawer({
             <div>
               <Dialog.Title>编辑表格</Dialog.Title>
               <Dialog.Description>
-                首行为表头 · 框选、复制粘贴和 Tab 连续编辑 · 应用后更新正文
+                首行为表头 · F2 / 双击编辑 · Enter / Tab 连续编辑 · 拖动列头排序
+                · 右键列头操作
               </Dialog.Description>
             </div>
             <button
@@ -211,37 +306,15 @@ export default function TableDrawer({
             >
               删除行
             </button>
-            <button
-              onClick={() => {
-                structural(
-                  draft.rows.map((r) => [
-                    ...r.slice(0, column + 1),
-                    "",
-                    ...r.slice(column + 1),
-                  ]),
-                  [
-                    ...draft.aligns.slice(0, column + 1),
-                    "left",
-                    ...draft.aligns.slice(column + 1),
-                  ],
-                );
-                setWidths([]);
-              }}
-            >
-              添加列
-            </button>
-            <button
-              disabled={draft.aligns.length === 1}
-              onClick={() => {
-                structural(
-                  draft.rows.map((r) => r.filter((_, i) => i !== column)),
-                  draft.aligns.filter((_, i) => i !== column),
-                );
-                setWidths([]);
-              }}
-            >
-              删除列
-            </button>
+            {columnActions.map(({ action, label, disabled }) => (
+              <button
+                key={action}
+                disabled={disabled}
+                onClick={() => changeColumn(action)}
+              >
+                {label}
+              </button>
+            ))}
             <select
               aria-label="当前列对齐方式"
               value={draft.aligns[column]}
@@ -297,6 +370,35 @@ export default function TableDrawer({
               width={size.width}
               height={size.height}
               columns={columns}
+              keybindings={{
+                activateCell: "F2|Enter|shift+Enter",
+                downFill: true,
+                rightFill: true,
+              }}
+              onColumnMoved={moveColumn}
+              onHeaderMenuClick={(col, bounds) => {
+                setSelection({
+                  columns: CompactSelection.fromSingleSelection(col),
+                  rows: CompactSelection.empty(),
+                });
+                setColumnMenu({
+                  column: col,
+                  x: bounds.x,
+                  y: bounds.y + bounds.height,
+                });
+              }}
+              onHeaderContextMenu={(col, event) => {
+                event.preventDefault();
+                setSelection({
+                  columns: CompactSelection.fromSingleSelection(col),
+                  rows: CompactSelection.empty(),
+                });
+                setColumnMenu({
+                  column: col,
+                  x: event.bounds.x,
+                  y: event.bounds.y + event.bounds.height,
+                });
+              }}
               rows={draft.rows.length}
               getCellContent={getCell}
               getCellsForSelection={true}
@@ -367,6 +469,41 @@ export default function TableDrawer({
               </>
             )}
           </footer>
+          <Dropdown.Root
+            open={columnMenu !== null}
+            onOpenChange={(open) => {
+              if (!open) setColumnMenu(null);
+            }}
+          >
+            <Dropdown.Trigger
+              aria-label="列操作菜单"
+              style={{
+                position: "fixed",
+                left: Math.min(columnMenu?.x ?? 0, window.innerWidth - 170),
+                top: columnMenu?.y ?? 0,
+                width: 1,
+                height: 1,
+                padding: 0,
+                border: 0,
+              }}
+            />
+            <Dropdown.Content
+              className="table-column-menu"
+              side="bottom"
+              align="start"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              {columnActions.map(({ action, label, disabled }) => (
+                <Dropdown.Item
+                  key={action}
+                  disabled={disabled}
+                  onSelect={() => changeColumn(action, columnMenu?.column)}
+                >
+                  {label}
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Content>
+          </Dropdown.Root>
           <div id="portal" className="glide-portal" />
         </Dialog.Content>
       </Dialog.Portal>

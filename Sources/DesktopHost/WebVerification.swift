@@ -19,6 +19,7 @@ final class WebVerification {
             try SourceFile(text: original, encoding: .utf8BOM).data.write(to: file)
             host = try Host(url: file, recovery: RecoveryStore(directory: root.appendingPathComponent("Recovery")))
             host?.showWindow(nil)
+            NSApp.activate(ignoringOtherApps: true)
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.waitReady() }
         } catch { fail(error.localizedDescription) }
     }
@@ -105,6 +106,27 @@ final class WebVerification {
           input.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
           input.dispatchEvent(new Event('input',{bubbles:true}));input.blur();
         };
+        // 验证列结构操作、选中列跟随和 F2 原位编辑。
+        const tableButton=label=>[...drawer.querySelectorAll('button')].find(b=>b.textContent===label);
+        tableButton('右移列').click();await nextFrame();
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='a','Moved column remains selected');
+        check(document.querySelector('select[aria-label="当前列对齐方式"]').value==='left','Column alignment moves with its data');
+        tableButton('左侧插入列').click();await nextFrame();
+        check(drawer.querySelector('.table-drawer-footer').textContent.includes('3 列'),'Insert column at selected position');
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='','Inserted column is selected');
+        tableButton('删除列').click();await nextFrame();
+        check(drawer.querySelector('.table-drawer-footer').textContent.includes('2 列'),'Delete selected column');
+        api.command('undo');await nextFrame();api.command('undo');await nextFrame();api.command('undo');await nextFrame();
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='a','Undo restores original column order');
+        canvas.focus();
+        canvas.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));await nextFrame();
+        canvas.dispatchEvent(new KeyboardEvent('keydown',{key:'F2',bubbles:true,cancelable:true}));await nextFrame();
+        for(let wait=0;wait<20 && !document.querySelector('#portal textarea,#portal input');wait++) await new Promise(r=>setTimeout(r,25));
+        const cellEditor=document.querySelector('#portal textarea,#portal input');
+        check(!!cellEditor,'F2 opens in-cell text editor');
+        cellEditor.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await nextFrame();
+        // 撤销/重做一次恢复首个单元格，继续既有单元格提交验证。
+        api.command('redo');await nextFrame();api.command('undo');await nextFrame();
         setCell('renamed');await nextFrame();
         check(ed.buffer.raw===saved,'Table draft edits do not modify document before applying');
         api.command('undo');await nextFrame();

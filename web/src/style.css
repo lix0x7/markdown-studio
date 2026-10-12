@@ -1144,3 +1144,27 @@ footer svg {
     width: 100vw;
   }
 }
+
+.table-column-menu {
+  z-index: 60;
+  min-width: 150px;
+  padding: 5px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px #0002;
+}
+.table-column-menu [role="menuitem"] {
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+.table-column-menu [data-highlighted] {
+  background: var(--accent-soft);
+}
+.table-column-menu [data-disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
