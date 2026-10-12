@@ -247,7 +247,20 @@ export default function App() {
     if (data.recovered) setNotice("已恢复未保存草稿，请检查后保存。");
   };
   const openTable = (model: TableModel) => {
-    tableOwner.current = editor.current?.active() ?? null;
+    const ed = editor.current?.active();
+    tableOwner.current = ed ?? null;
+    if (ed) {
+      const selected = ed.view.state.selection.main.head;
+      // 使用表格后方的位置保持预览，撤销记录不再沿用文章顶部的旧光标。
+      ed.anchorHistory(
+        selected >= model.from && selected <= model.to
+          ? selected
+          : Math.min(
+              ed.view.state.doc.length,
+              ed.view.state.doc.lineAt(model.to).to + 1,
+            ),
+      );
+    }
     setTable(model);
   };
   async function importImages(files: File[]) {

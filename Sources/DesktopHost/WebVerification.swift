@@ -327,6 +327,23 @@ final class WebVerification {
         const nativeBefore=await api.request('ready');
         await api.request('change',{patches:[{from:0,to:nativeBefore.text.length,insert:ed.buffer.raw}]});
         const pause=()=>new Promise(r=>setTimeout(r,100));
+        // 从文章底部的表格按钮打开抽屉，正文旧光标仍在顶部，验证关闭后撤销的定位。
+        const undoFixture='# Top\n\n'+('Paragraph before the table.\n\n'.repeat(60))+'| A | B |\n| --- | --- |\n| x | y |\n\nAfter table\n';
+        ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:undoFixture},selection:{anchor:0}});await pause();
+        ed.jump(undoFixture.length-1);await pause();await pause();
+        ed.view.dispatch({selection:{anchor:0}});
+        let previewButton=null;
+        for(let i=0;i<20 && !previewButton;i++){ed.view.scrollDOM.scrollTop=ed.view.scrollDOM.scrollHeight;await pause();previewButton=document.querySelector('[aria-label="编辑此表格"]');}
+        if(!previewButton)throw new Error('Bottom table preview missing');
+        previewButton.click();await pause();await pause();
+        const undoCell=document.querySelector('input[aria-label="当前单元格内容"]');
+        undoCell.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(undoCell,'Changed');undoCell.dispatchEvent(new Event('input',{bubbles:true}));undoCell.blur();await pause();
+        document.querySelector('[aria-label="关闭表格编辑器"]').click();await pause();
+        ed.undo();await pause();await pause();
+        if(ed.view.state.doc.toString()!==undoFixture)throw new Error('Outside table undo did not restore source');
+        if(ed.view.state.selection.main.head<undoFixture.indexOf('| A') || ed.view.scrollDOM.scrollTop<1000)throw new Error('Outside table undo jumped to document start');
+        ed.redo();await pause();await pause();
+        if(!ed.buffer.raw.includes('Changed') || ed.view.scrollDOM.scrollTop<1000)throw new Error('Outside table redo lost table position');
         const source='# Before\n\n<div class="columns" data-ratios="2,1,1">\n<md>\n# Left\n\nleft text\n</md>\n<md>\n## Middle\n\n| A | B |\n| --- | --- |\n| x | y |\n</md>\n<md>\n## Right\n\nright text\n</md>\n</div>\n\nAfter';
         ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:source},selection:{anchor:0},scrollIntoView:true});await pause();await pause();
         let panes=[...document.querySelectorAll('.column-pane')];

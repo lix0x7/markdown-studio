@@ -1183,6 +1183,21 @@ export class MarkdownEditor {
   find() {
     openSearchPanel(this.view);
   }
+  // 表格组件不会移动正文光标；提交前将撤销锚点定位到表格附近，并映射到父分栏。
+  anchorHistory(from: number) {
+    this.view.dispatch({ selection: { anchor: from } });
+    const parent = this.parentEditor;
+    if (!parent) return;
+    for (const el of parent.view.dom.querySelectorAll<HTMLElement>(
+      ".md-columns",
+    )) {
+      const ui = columnUIs.get(el);
+      const index = ui?.children.indexOf(this) ?? -1;
+      if (index < 0) continue;
+      parent.anchorHistory(ui!.block.columns[index].from + from);
+      break;
+    }
+  }
   undo() {
     if (this.parentEditor) {
       this.parentEditor.undo();
