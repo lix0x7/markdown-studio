@@ -309,3 +309,15 @@ it("restores an image preview when reference editing loses focus", async () => {
   expect(ed.view.dom.querySelector(".md-image")).not.toBeNull();
   expect(ed.buffer.raw).toBe(raw);
 });
+
+it("mounts valid child columns inside an unsupported legacy wrapper", async () => {
+  const nested = columnMarkup(["# Left", "# Right"]);
+  const raw =
+    '<div class="columns">\n<md>\n' +
+    nested +
+    "\n</md>\n<md>\nlegacy\n</md>\n</div>";
+  const { ed, disk } = create(raw);
+  await Promise.resolve();
+  expect(ed.view.dom.querySelectorAll(".column-pane")).toHaveLength(2);
+  expect(disk()).toBe(raw);
+});

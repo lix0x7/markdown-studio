@@ -42,9 +42,10 @@ export function parseColumns(text: string): ColumnBlock[] {
       fence = marker[1];
       continue;
     }
+    // 无效外层不能吞掉后续合法分栏，例如不再支持的 div > md 内嵌新结构。
     const open = /^ {0,3}<div\b([^>]*)>\s*$/.exec(line);
     if (
-      !block &&
+      (!block || !block.valid) &&
       open &&
       /\bclass=["'][^"']*\bcolumns\b[^"']*["']/.test(open[1])
     ) {

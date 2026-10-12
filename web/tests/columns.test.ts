@@ -62,3 +62,20 @@ it("emits native grid sections and rejects unwrapped md columns", () => {
     "# Right",
   ]);
 });
+
+it("renders valid sections nested inside an unsupported legacy wrapper", () => {
+  const nested = columnMarkup(["# Left", "Right"], [2, 1]);
+  for (const close of ["\n</md>\n<md>\nold right\n</md>\n</div>", ""]) {
+    const prefix = '<div class="columns">\n<md>\nold left\n\n';
+    const text = prefix + nested + close;
+    const blocks = parseColumns(text);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].from).toBe(prefix.length);
+    expect(blocks[0].original).toBe(nested);
+    expect(blocks[0].columns.map((c) => text.slice(c.from, c.to))).toEqual([
+      "# Left",
+      "Right",
+    ]);
+    expect(renderHTML(text)).toContain("<h1>Left</h1>");
+  }
+});
