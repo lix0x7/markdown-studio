@@ -257,9 +257,12 @@ export default function TableDrawer({
       columns: CompactSelection.empty(),
     });
   };
-  const changeRow = (action: RowAction, at = row) => {
+  const changeRow = (action: RowAction, at = row, count = 1) => {
     setRowMenu(null);
-    if ((action === "before" || action === "after") && !validInsertCount)
+    if (
+      (action === "before" || action === "after") &&
+      (!Number.isInteger(count) || count < 1 || count > 1000)
+    )
       return;
     if (action === "delete" && selection.rows.length > 1) {
       const rows = draft.rows.filter(
@@ -280,7 +283,7 @@ export default function TableDrawer({
     if (index === 0) return;
     let rows = [...draft.rows];
     if (action === "delete") rows.splice(index, 1);
-    else rows = insertTable(draft, "rows", index, insertCount).rows;
+    else rows = insertTable(draft, "rows", index, count).rows;
     update({ ...draft, rows });
     setSelection({
       rows: CompactSelection.fromSingleSelection(
@@ -293,13 +296,13 @@ export default function TableDrawer({
     [
       {
         action: "before",
-        label: `上方插入${insertCount === 1 ? "" : insertQuantity}行`,
-        disabled: row === 0 || !validInsertCount,
+        label: "上方插入行",
+        disabled: row === 0,
       },
       {
         action: "after",
-        label: `下方插入${insertCount === 1 ? "" : insertQuantity}行`,
-        disabled: !validInsertCount,
+        label: "下方插入行",
+        disabled: false,
       },
       {
         action: "delete",
@@ -337,9 +340,12 @@ export default function TableDrawer({
       rows: CompactSelection.empty(),
     });
   };
-  const changeColumn = (action: ColumnAction, at = column) => {
+  const changeColumn = (action: ColumnAction, at = column, count = 1) => {
     setColumnMenu(null);
-    if ((action === "before" || action === "after") && !validInsertCount)
+    if (
+      (action === "before" || action === "after") &&
+      (!Number.isInteger(count) || count < 1 || count > 1000)
+    )
       return;
     if (action === "delete" && selection.columns.length > 1) {
       const order = draft.aligns
@@ -374,8 +380,8 @@ export default function TableDrawer({
       aligns.splice(index, 1);
       nextWidths.splice(index, 1);
     } else {
-      ({ rows, aligns } = insertTable(draft, "columns", index, insertCount));
-      nextWidths.splice(index, 0, ...Array(insertCount).fill(200));
+      ({ rows, aligns } = insertTable(draft, "columns", index, count));
+      nextWidths.splice(index, 0, ...Array(count).fill(200));
     }
     update({ rows, aligns });
     setWidths(nextWidths);
@@ -399,13 +405,13 @@ export default function TableDrawer({
     },
     {
       action: "before",
-      label: `左侧插入${insertCount === 1 ? "" : insertQuantity}列`,
-      disabled: !validInsertCount,
+      label: "左侧插入列",
+      disabled: false,
     },
     {
       action: "after",
-      label: `右侧插入${insertCount === 1 ? "" : insertQuantity}列`,
-      disabled: !validInsertCount,
+      label: "右侧插入列",
+      disabled: false,
     },
     {
       action: "delete",
@@ -466,20 +472,6 @@ export default function TableDrawer({
             </button>
           </header>
           <div className="table-drawer-toolbar">
-            <label className="table-insert-count">
-              插入数量
-              <input
-                type="number"
-                aria-label="插入行列数量"
-                min={1}
-                max={1000}
-                step={1}
-                title="每次插入 1–1000 行或列"
-                value={insertQuantity}
-                aria-invalid={!validInsertCount}
-                onChange={(event) => setInsertQuantity(event.target.value)}
-              />
-            </label>
             {rowActions.map(({ action, label, disabled }) => (
               <button
                 key={action}
@@ -723,13 +715,38 @@ export default function TableDrawer({
               align="start"
               onCloseAutoFocus={(e) => e.preventDefault()}
             >
+              <label className="table-insert-count">
+                插入列数
+                <input
+                  type="number"
+                  aria-label="插入列数"
+                  min={1}
+                  max={1000}
+                  step={1}
+                  title="每次插入 1–1000 列"
+                  value={insertQuantity}
+                  aria-invalid={!validInsertCount}
+                  onChange={(event) => setInsertQuantity(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") event.stopPropagation();
+                  }}
+                />
+              </label>
               {columnActions.map(({ action, label, disabled }) => (
                 <Dropdown.Item
                   key={action}
-                  disabled={disabled}
-                  onSelect={() => changeColumn(action, columnMenu?.column)}
+                  disabled={
+                    disabled ||
+                    ((action === "before" || action === "after") &&
+                      !validInsertCount)
+                  }
+                  onSelect={() =>
+                    changeColumn(action, columnMenu?.column, insertCount)
+                  }
                 >
-                  {label}
+                  {action === "before" || action === "after"
+                    ? label.replace("插入", `插入${insertQuantity}`)
+                    : label}
                 </Dropdown.Item>
               ))}
             </Dropdown.Content>
@@ -758,13 +775,36 @@ export default function TableDrawer({
               align="start"
               onCloseAutoFocus={(e) => e.preventDefault()}
             >
+              <label className="table-insert-count">
+                插入行数
+                <input
+                  type="number"
+                  aria-label="插入行数"
+                  min={1}
+                  max={1000}
+                  step={1}
+                  title="每次插入 1–1000 行"
+                  value={insertQuantity}
+                  aria-invalid={!validInsertCount}
+                  onChange={(event) => setInsertQuantity(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Escape") event.stopPropagation();
+                  }}
+                />
+              </label>
               {rowActions.map(({ action, label, disabled }) => (
                 <Dropdown.Item
                   key={action}
-                  disabled={disabled}
-                  onSelect={() => changeRow(action, rowMenu?.row)}
+                  disabled={
+                    disabled ||
+                    ((action === "before" || action === "after") &&
+                      !validInsertCount)
+                  }
+                  onSelect={() => changeRow(action, rowMenu?.row, insertCount)}
                 >
-                  {label}
+                  {action === "before" || action === "after"
+                    ? label.replace("插入", `插入${insertQuantity}`)
+                    : label}
                 </Dropdown.Item>
               ))}
             </Dropdown.Content>
