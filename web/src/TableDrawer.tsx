@@ -17,6 +17,7 @@ import {
 import type { TableModel } from "./source";
 
 import { sortTable, pasteTable, type TableDraft as Draft } from "./table-data";
+type RowAction = "before" | "after" | "delete" | "up" | "down";
 type ColumnAction =
   "before" | "after" | "delete" | "left" | "right" | "ascending" | "descending";
 export default function TableDrawer({
@@ -47,6 +48,11 @@ export default function TableDrawer({
       rangeStack: [],
     },
   });
+  const [rowMenu, setRowMenu] = useState<{
+    row: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const [columnMenu, setColumnMenu] = useState<{
     column: number;
     x: number;
@@ -182,18 +188,48 @@ export default function TableDrawer({
     },
     [update],
   );
-  const structural = (rows: string[][], aligns = draft.aligns) => {
-    update({ rows, aligns });
+  // 行操作与列操作一致，以选中行或当前单元格为目标；首行表头不参与移动和删除。
+  const moveRow = (from: number, to: number) => {
+    if (from === 0 || to === 0 || from === to) return;
+    const rows = [...draft.rows];
+    rows.splice(to, 0, rows.splice(from, 1)[0]);
+    update({ ...draft, rows });
     setSelection({
+      rows: CompactSelection.fromSingleSelection(to),
       columns: CompactSelection.empty(),
-      rows: CompactSelection.empty(),
-      current: {
-        cell: [0, 0],
-        range: { x: 0, y: 0, width: 1, height: 1 },
-        rangeStack: [],
-      },
     });
   };
+  const changeRow = (action: RowAction, at = row) => {
+    setRowMenu(null);
+    if (action === "up" || action === "down") {
+      moveRow(at, at + (action === "up" ? -1 : 1));
+      return;
+    }
+    const index = action === "after" ? at + 1 : at;
+    if (index === 0) return;
+    const rows = [...draft.rows];
+    if (action === "delete") rows.splice(index, 1);
+    else rows.splice(index, 0, Array(draft.aligns.length).fill(""));
+    update({ ...draft, rows });
+    setSelection({
+      rows: CompactSelection.fromSingleSelection(
+        Math.min(index, rows.length - 1),
+      ),
+      columns: CompactSelection.empty(),
+    });
+  };
+  const rowActions: { action: RowAction; label: string; disabled: boolean }[] =
+    [
+      { action: "before", label: "上方插入行", disabled: row === 0 },
+      { action: "after", label: "下方插入行", disabled: false },
+      { action: "delete", label: "删除行", disabled: row === 0 },
+      { action: "up", label: "上移行", disabled: row <= 1 },
+      {
+        action: "down",
+        label: "下移行",
+        disabled: row === 0 || row === draft.rows.length - 1,
+      },
+    ];
   // 列结构变更同时移动表头、数据、对齐和列宽，并保留操作后的选中位置。
   const moveColumn = (from: number, to: number) => {
     if (from === to) return;
@@ -287,8 +323,9 @@ export default function TableDrawer({
             <div>
               <Dialog.Title>编辑表格</Dialog.Title>
               <Dialog.Description>
-                首行为表头 · F2 / 双击编辑 · Enter / Tab 连续编辑 · 拖动列头排序
-                · 右键列头操作 · 框选后 ⌘C / ⌘V 复制粘贴
+                首行为表头 · F2 / 双击编辑 · Enter / Tab 连续编辑 ·
+                拖动行号／列头调整顺序 · 右键行号／列头操作 · 框选后 ⌘C / ⌘V
+                复制粘贴
               </Dialog.Description>
             </div>
             <button
@@ -300,23 +337,16 @@ export default function TableDrawer({
             </button>
           </header>
           <div className="table-drawer-toolbar">
-            <button
-              onClick={() =>
-                structural([
-                  ...draft.rows.slice(0, row + 1),
-                  Array(draft.aligns.length).fill(""),
-                  ...draft.rows.slice(row + 1),
-                ])
-              }
-            >
-              添加行
-            </button>
-            <button
-              disabled={row === 0}
-              onClick={() => structural(draft.rows.filter((_, i) => i !== row))}
-            >
-              删除行
-            </button>
+            {rowActions.map(({ action, label, disabled }) => (
+              <button
+                key={action}
+                disabled={disabled}
+                onClick={() => changeRow(action)}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="divider" />
             {columnActions.map(({ action, label, disabled }) => (
               <button
                 key={action}
@@ -387,11 +417,26 @@ export default function TableDrawer({
                 rightFill: true,
               }}
               onColumnMoved={moveColumn}
+              onRowMoved={moveRow}
+              onCellContextMenu={([, r], event) => {
+                event.preventDefault();
+                setColumnMenu(null);
+                setSelection({
+                  rows: CompactSelection.fromSingleSelection(r),
+                  columns: CompactSelection.empty(),
+                });
+                setRowMenu({
+                  row: r,
+                  x: event.bounds.x,
+                  y: event.bounds.y + event.bounds.height,
+                });
+              }}
               onHeaderMenuClick={(col, bounds) => {
                 setSelection({
                   columns: CompactSelection.fromSingleSelection(col),
                   rows: CompactSelection.empty(),
                 });
+                setRowMenu(null);
                 setColumnMenu({
                   column: col,
                   x: bounds.x,
@@ -404,6 +449,7 @@ export default function TableDrawer({
                   columns: CompactSelection.fromSingleSelection(col),
                   rows: CompactSelection.empty(),
                 });
+                setRowMenu(null);
                 setColumnMenu({
                   column: col,
                   x: event.bounds.x,
@@ -529,6 +575,41 @@ export default function TableDrawer({
                   key={action}
                   disabled={disabled}
                   onSelect={() => changeColumn(action, columnMenu?.column)}
+                >
+                  {label}
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Content>
+          </Dropdown.Root>
+          <Dropdown.Root
+            open={rowMenu !== null}
+            onOpenChange={(open) => {
+              if (!open) setRowMenu(null);
+            }}
+          >
+            <Dropdown.Trigger
+              aria-label="行操作菜单"
+              style={{
+                position: "fixed",
+                left: Math.min(rowMenu?.x ?? 0, window.innerWidth - 170),
+                top: rowMenu?.y ?? 0,
+                width: 1,
+                height: 1,
+                padding: 0,
+                border: 0,
+              }}
+            />
+            <Dropdown.Content
+              className="table-column-menu"
+              side="bottom"
+              align="start"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              {rowActions.map(({ action, label, disabled }) => (
+                <Dropdown.Item
+                  key={action}
+                  disabled={disabled}
+                  onSelect={() => changeRow(action, rowMenu?.row)}
                 >
                   {label}
                 </Dropdown.Item>

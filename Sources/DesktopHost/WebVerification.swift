@@ -55,7 +55,7 @@ final class WebVerification {
         check(ed.buffer.raw.includes('| Name | Value |') && ed.buffer.raw.includes('| --- | --- |'),'Editor paste converts clipboard HTML into Markdown table');
         ed.undo();check(ed.buffer.raw===saved,'Pasted Markdown table undoes in one step');
         ed.view.dispatch({selection:{anchor:0},scrollIntoView:true});
-        const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+        const nextFrame=()=>new Promise(r=>{const timeout=setTimeout(r,100);requestAnimationFrame(()=>requestAnimationFrame(()=>{clearTimeout(timeout);r();}));});
         await nextFrame();
         const lineDOM=ed.view.contentDOM.querySelector('.cm-line');
         const range=document.createRange();range.selectNodeContents(lineDOM);
@@ -125,6 +125,18 @@ final class WebVerification {
         };
         // 验证列结构操作、选中列跟随和 F2 原位编辑。
         const tableButton=label=>[...drawer.querySelectorAll('button')].find(b=>b.textContent===label);
+        check(tableButton('删除行').disabled && tableButton('上移行').disabled,'Header row cannot be deleted or moved');
+        tableButton('下方插入行').click();await nextFrame();
+        check(drawer.querySelector('.table-drawer-footer').textContent.includes('3 行'),'Insert row below selection');
+        setCell('new row');await nextFrame();
+        tableButton('下移行').click();await nextFrame();
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='new row' && drawer.querySelector('.table-formula span').textContent.includes('第 3 行'),'Moved row remains selected');
+        tableButton('上移行').click();await nextFrame();
+        tableButton('上方插入行').click();await nextFrame();
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='','Insert row above selection selects new row');
+        tableButton('删除行').click();await nextFrame();
+        for(let i=0;i<6;i++){api.command('undo');await nextFrame();}
+        check(drawer.querySelector('.table-drawer-footer').textContent.includes('2 行') && document.querySelector('input[aria-label="当前单元格内容"]').value==='a','Undo restores all row operations and header');
         tableButton('右移列').click();await nextFrame();
         check(document.querySelector('input[aria-label="当前单元格内容"]').value==='a','Moved column remains selected');
         check(document.querySelector('select[aria-label="当前列对齐方式"]').value==='left','Column alignment moves with its data');
