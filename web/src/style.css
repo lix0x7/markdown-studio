@@ -1383,3 +1383,103 @@ footer svg {
 .table-insert-count input[aria-invalid="true"] {
   border-color: #c34b42;
 }
+
+/* 双栏代码对比独立滚动，覆盖正文排版，保留不换行的代码坐标。 */
+.md-diff {
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  font:
+    12px/1.6 Menlo,
+    monospace;
+}
+.diff-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--side);
+  border-bottom: 1px solid var(--line);
+}
+.diff-side-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.diff-side-tools + .diff-side-tools {
+  border-left: 1px solid var(--line);
+}
+.diff-side-tools span {
+  margin-right: auto;
+  color: var(--muted);
+}
+.diff-side-tools button {
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 3px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.diff-side-tools button:hover {
+  background: var(--line);
+  color: var(--text);
+}
+.diff-status {
+  padding: 0 10px;
+  color: var(--muted);
+  font: 11px/1.7 system-ui;
+}
+.diff-status:not(:empty) {
+  padding-block: 5px;
+}
+.md-diff .cm-mergeView {
+  max-height: 520px;
+  overflow: auto;
+}
+.md-diff .cm-mergeViewEditors {
+  align-items: stretch;
+}
+.md-diff .cm-editor {
+  height: auto;
+  min-height: 180px;
+  font:
+    12px/1.7 Menlo,
+    monospace;
+}
+.md-diff .cm-content {
+  max-width: none;
+  width: auto;
+  margin: 0;
+  padding: 8px 0 !important;
+  white-space: pre;
+}
+.md-diff .cm-line {
+  padding: 0 8px !important;
+}
+.md-diff .cm-gutters {
+  background: #f7f8f8;
+  color: #909895;
+  border: 0;
+}
+.md-diff .cm-merge-a .cm-changedLine {
+  background: #fff0ee;
+}
+.md-diff .cm-merge-b .cm-changedLine {
+  background: #eaf6ed;
+}
+.md-diff .cm-merge-a .cm-changedText {
+  background: #f7c4bf;
+  text-decoration: none;
+}
+.md-diff .cm-merge-b .cm-changedText {
+  background: #bfe7cb;
+}
+.md-diff .cm-mergeSpacer {
+  background: #f3f4f5;
+}

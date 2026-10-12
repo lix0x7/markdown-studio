@@ -404,3 +404,85 @@ describe.each([false, true])("move lines (source mode: %s)", (sourceMode) => {
     expect(disk()).toBe("first\nsecond\nthird\nlast");
   });
 });
+
+describe("embedded diff editor", () => {
+  it("syncs edits, formatting, sorting and undo without recreating either editor", async () => {
+    const { diffMarkup, parseDiffs } = await import("../src/diff");
+    const raw =
+      "# Before\n\n" + diffMarkup('{"z":1,"a":2}', '{"z":3}') + "\n\nAfter";
+    const { ed, disk } = create(raw);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const widget = ed.view.dom.querySelector(".md-diff")!;
+    const left = EditorView.findFromDOM(
+      widget.querySelector(".cm-merge-a") as HTMLElement,
+    )!;
+    const right = EditorView.findFromDOM(
+      widget.querySelector(".cm-merge-b") as HTMLElement,
+    )!;
+    expect(left).toBeTruthy();
+    expect(right).toBeTruthy();
+    left.dispatch({
+      changes: { from: 0, to: left.state.doc.length, insert: '{"b":2,"a":1}' },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(parseDiffs(ed.view.state.doc.toString())[0].left).toBe(
+      '{"b":2,"a":1}',
+    );
+    expect(ed.view.dom.querySelector(".md-diff")).toBe(widget);
+    ed.undo();
+    expect(disk()).toBe(raw);
+    expect(left.state.doc.toString()).toBe('{"z":1,"a":2}');
+    (
+      widget.querySelector(
+        '[aria-label="左侧JSON 键排序"]',
+      ) as HTMLButtonElement
+    ).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(parseDiffs(ed.view.state.doc.toString())[0].left).toBe(
+      '{\n  "a": 2,\n  "z": 1\n}',
+    );
+    expect(right.state.doc.toString()).toBe('{"z":3}');
+    ed.undo();
+    expect(disk()).toBe(raw);
+    right.dispatch({
+      changes: { from: 0, to: right.state.doc.length, insert: "not json" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (
+      widget.querySelector(
+        '[aria-label="右侧格式化 JSON"]',
+      ) as HTMLButtonElement
+    ).click();
+    expect(right.state.doc.toString()).toBe("not json");
+    expect(widget.querySelector('[role="status"]')!.textContent).not.toBe("");
+    ed.undo();
+    expect(disk()).toBe(raw);
+    ed.toggle();
+    expect(ed.view.dom.querySelector(".md-diff")).toBeNull();
+    ed.toggle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(ed.view.dom.querySelector(".md-diff")).toBeTruthy();
+  });
+});
+
+it("edits a diff inside a column and restores it through document undo", async () => {
+  const { diffMarkup, parseDiffs } = await import("../src/diff");
+  const raw = columnMarkup([diffMarkup("left", "right"), "Other column"]);
+  const { ed, disk } = create(raw);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const element = ed.view.dom.querySelector(
+    ".md-diff .cm-merge-a",
+  ) as HTMLElement;
+  const left = EditorView.findFromDOM(element)!;
+  expect(left).toBeTruthy();
+  left.dispatch({
+    changes: { from: 0, to: left.state.doc.length, insert: "changed" },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(parseDiffs(ed.view.state.doc.toString())[0].left).toBe("changed");
+  expect(disk()).toContain("Other column");
+  ed.undo();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(disk()).toBe(raw);
+  expect(left.state.doc.toString()).toBe("left");
+});

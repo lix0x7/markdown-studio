@@ -55,6 +55,17 @@ CommonMark 定义了原始 HTML 的解析规则，但不能据此认为 HTML 标
 
 规范参考：[CommonMark](https://spec.commonmark.org/)、[GitHub Flavored Markdown](https://github.github.com/gfm/)。
 
+## 双栏代码 Diff
+
+工具栏点击「插入代码对比」即可插入。选中的文本会填入左侧，两侧都可编辑或粘贴代码，修改实时写回 Markdown；支持放在分栏内。
+
+- 基于 CodeMirror MergeView，参考 IDEA 的双栏交互：对齐对应行，标出新增、删除，并高亮行内变化；并非复用 IDEA 的内部算法。
+- 两侧右上角各有「复制」「格式化 JSON」「JSON 键排序」按钮，只作用于所在侧。排序递归处理对象键，保留数组顺序及长整数原始精度；无效 JSON 会提示并保留原文。
+- 与正文共用撤销 / 重做历史，格式化和排序可单独撤销。长代码不自动折行，支持滚动。
+- 内容保存为 `md-diff` 专用代码围栏，内部 JSON 保存 `left` / `right` 字符串。普通 Markdown 渲染器会将其作为代码块显示；本应用导出 HTML / PDF 时保留双栏和差异高亮。
+
+![双栏代码 Diff：实时差异、JSON 格式化与复制](docs/screenshots/diff-editor.png)
+
 ## 典型截图
 
 以下为当前 **Markdown Studio 前端重写版**的 macOS 应用实拍，采用 React + CodeMirror 6 + Radix，运行在原生 WKWebView 宿主中。当前构建与启动方法见 [DEVELOPMENT.md](DEVELOPMENT.md)，验收记录见 [VALIDATION.md](VALIDATION.md)；下方原有章节保留的是早期纯 AppKit 版本说明。

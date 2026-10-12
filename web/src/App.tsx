@@ -1,3 +1,4 @@
+import { diffMarkup } from "./diff";
 import {
   isolateHistory,
   undo as undoTableChange,
@@ -20,6 +21,7 @@ import {
   Image,
   Table,
   Columns,
+  GitDiff,
   Code,
   ArrowSquareOut,
   CaretDown,
@@ -324,6 +326,25 @@ export default function App() {
       : editor.current?.active();
     if (!ed) return;
     try {
+      if (name === "diff") {
+        const selected = ed.view.state.selection.main;
+        ed.view.dispatch({
+          changes: {
+            from: selected.from,
+            to: selected.to,
+            insert:
+              "\n\n" +
+              diffMarkup(
+                ed.view.state.sliceDoc(selected.from, selected.to),
+                "",
+              ) +
+              "\n\n",
+          },
+          annotations: isolateHistory.of("full"),
+          userEvent: "input.diff",
+        });
+        return;
+      }
       if (name === "columns") {
         const selected = ed.view.state.selection.main;
         const markup = columnMarkup([
@@ -935,6 +956,9 @@ export default function App() {
             </Tool>
             <Tool label="插入分栏" onClick={() => void command("columns")}>
               <Columns />
+            </Tool>
+            <Tool label="插入代码对比" onClick={() => void command("diff")}>
+              <GitDiff />
             </Tool>
             <Tool label="代码块与语言" onClick={() => void command("code")}>
               <Code />

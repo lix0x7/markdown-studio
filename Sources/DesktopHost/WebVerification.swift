@@ -63,7 +63,38 @@ final class WebVerification {
         host?.web.evaluateJavaScript("Boolean(window.editorAPI)") { [weak self] value, error in
             guard let self, self.timer != nil, value as? Bool == true else { return }
             self.timer?.invalidate(); self.timer = nil
-            if CommandLine.arguments.contains("--table-scroll-only") { self.runTableScrollChecks() } else { self.runImageMoveChecks() }
+            if CommandLine.arguments.contains("--diff-only") { self.runDiffChecks() } else if CommandLine.arguments.contains("--table-scroll-only") { self.runTableScrollChecks() } else { self.runImageMoveChecks() }
+        }
+    }
+    func runDiffChecks() {
+        let script = #"""
+        const ed=window.editorAPI.editor;
+        const pause=()=>new Promise(r=>setTimeout(r,100));
+        const source='# Diff\n\n```md-diff\n'+JSON.stringify({left:'',right:'{"a":2}'})+'\n```\n\nAfter';
+        ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:source},selection:{anchor:0},scrollIntoView:true});
+        await pause();await pause();
+        const widget=document.querySelector('.md-diff'),left=widget?.querySelector('[aria-label="Diff 左侧代码"]');
+        if(!left)throw new Error('Diff editors missing');
+        left.focus();document.execCommand('insertText',false,'{"z":900719925474099312345,"a":1}');
+        await pause();await pause();
+        if(!ed.view.state.doc.toString().includes('900719925474099312345'))throw new Error('Diff did not sync to Markdown');
+        if(!widget.querySelector('.cm-changedText'))throw new Error('Inline diff highlights missing');
+        const edited=ed.view.state.doc.toString();
+        widget.querySelector('[aria-label="左侧JSON 键排序"]').click();await pause();
+        const data=JSON.parse(ed.view.state.doc.toString().split('```md-diff\n')[1].split('\n```')[0]);
+        if(data.left.indexOf('"a"')>data.left.indexOf('"z"') || !data.left.includes('900719925474099312345'))throw new Error('JSON sort lost order or precision');
+        left.dispatchEvent(new KeyboardEvent('keydown',{key:'z',metaKey:true,bubbles:true,cancelable:true}));await pause();
+        if(ed.view.state.doc.toString()!==edited)throw new Error('Diff sort undo failed');
+        if(document.querySelector('.md-diff')!==widget)throw new Error('Diff widget recreated during edit');
+        return true;
+        """#
+        host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { result in
+            switch result {
+            case .failure(let error): self.fail("Diff: \(error)")
+            case .success:
+                print("PASS: Native diff editing, inline highlights, JSON precision, sorting and undo")
+                fflush(stdout); self.host?.close(); exit(0)
+            }
         }
     }
     func runTableScrollChecks() {

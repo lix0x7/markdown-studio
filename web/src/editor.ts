@@ -1,3 +1,5 @@
+import { parseDiffs, renderDiffHTML } from "./diff";
+import { DiffWidget } from "./diff-widget";
 import {
   EditorState,
   Transaction,
@@ -76,6 +78,16 @@ export const renderHTML = (text: string): string => {
           .map((c) => `<section>${renderHTML(c.text)}</section>`)
           .join("") +
         "</div>";
+      at = block.to;
+    }
+    return html + renderHTML(text.slice(at));
+  }
+  const diffs = parseDiffs(text);
+  if (diffs.length) {
+    let at = 0,
+      html = "";
+    for (const block of diffs) {
+      html += renderHTML(text.slice(at, block.from)) + renderDiffHTML(block);
       at = block.to;
     }
     return html + renderHTML(text.slice(at));
@@ -647,7 +659,28 @@ function buildDecorations(
   focused = true,
 ): DecorationSet {
   const out: Range<Decoration>[] = [];
-  const columns = parseColumns(state.doc.toString());
+  const source = state.doc.toString();
+  const columns = parseColumns(source);
+  const diffs = parseDiffs(source).filter(
+    (block) =>
+      !columns.some(
+        (column) => block.from >= column.from && block.to <= column.to,
+      ),
+  );
+  for (const block of diffs)
+    out.push(
+      Decoration.replace({
+        widget: new DiffWidget(block, (view) => {
+          const owner = editorInstances.get(view)!;
+          return {
+            anchor: (at) => owner.anchorHistory(at),
+            undo: () => owner.undo(),
+            redo: () => owner.redo(),
+          };
+        }),
+        block: true,
+      }).range(block.from, block.to),
+    );
   for (const block of columns)
     if (block.to >= range.from && block.from <= range.to)
       out.push(
@@ -707,8 +740,13 @@ function buildDecorations(
     enter(n) {
       const name = n.name,
         from = n.from;
+      if (
+        name !== "Document" &&
+        diffs.some((block) => n.from >= block.from && n.to <= block.to)
+      )
+        return false;
       let to = n.to;
-      if (columns.some((block) => from >= block.from && from < block.to))
+      if (columns.some((block) => from >= block.from && n.to <= block.to))
         return false;
       if (name === "Table") {
         if (!editing(from, to)) return false;
