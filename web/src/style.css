@@ -1415,6 +1415,7 @@ footer svg {
   margin-right: auto;
   color: var(--muted);
 }
+.diff-toolbar button,
 .diff-side-tools button {
   font-family: inherit;
   font-size: 11px;
@@ -1426,6 +1427,7 @@ footer svg {
   color: var(--muted);
   cursor: pointer;
 }
+.diff-toolbar button:hover,
 .diff-side-tools button:hover {
   background: var(--line);
   color: var(--text);
@@ -1490,4 +1492,13 @@ footer svg {
 .md-diff .cm-search .cm-textfield {
   max-width: 100%;
   box-sizing: border-box;
+}
+
+.diff-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--side);
 }

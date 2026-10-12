@@ -433,15 +433,20 @@ describe("embedded diff editor", () => {
     expect(disk()).toBe(raw);
     expect(left.state.doc.toString()).toBe('{"z":1,"a":2}');
     (
-      widget.querySelector(
-        '[aria-label="左侧JSON 键排序"]',
-      ) as HTMLButtonElement
+      widget.querySelector('[aria-label="JSON 键排序"]') as HTMLButtonElement
     ).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(parseDiffs(ed.view.state.doc.toString())[0].left).toBe(
       '{\n  "a": 2,\n  "z": 1\n}',
     );
-    expect(right.state.doc.toString()).toBe('{"z":3}');
+    expect(right.state.doc.toString()).toBe('{\n  "z": 3\n}');
+    ed.undo();
+    expect(disk()).toBe(raw);
+    (
+      widget.querySelector('[aria-label="格式化 JSON"]') as HTMLButtonElement
+    ).click();
+    expect(left.state.doc.toString()).toBe('{\n  "z": 1,\n  "a": 2\n}');
+    expect(right.state.doc.toString()).toBe('{\n  "z": 3\n}');
     ed.undo();
     expect(disk()).toBe(raw);
     right.dispatch({
@@ -449,11 +454,10 @@ describe("embedded diff editor", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
     (
-      widget.querySelector(
-        '[aria-label="右侧格式化 JSON"]',
-      ) as HTMLButtonElement
+      widget.querySelector('[aria-label="格式化 JSON"]') as HTMLButtonElement
     ).click();
     expect(right.state.doc.toString()).toBe("not json");
+    expect(left.state.doc.toString()).toBe('{"z":1,"a":2}');
     expect(widget.querySelector('[role="status"]')!.textContent).not.toBe("");
     ed.undo();
     expect(disk()).toBe(raw);

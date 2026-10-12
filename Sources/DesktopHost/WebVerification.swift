@@ -87,8 +87,9 @@ final class WebVerification {
         if(window.getSelection().toString()!=='900719925474099312345')throw new Error('Diff find did not select matching text');
         search.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await pause();
         const edited=ed.view.state.doc.toString();
-        widget.querySelector('[aria-label="左侧JSON 键排序"]').click();await pause();
+        widget.querySelector('[aria-label="JSON 键排序"]').click();await pause();
         const data=JSON.parse(ed.view.state.doc.toString().split('```md-diff\n')[1].split('\n```')[0]);
+        if(data.right!=='{\n  "a": 2\n}')throw new Error('Global JSON sort did not format right side');
         if(data.left.indexOf('"a"')>data.left.indexOf('"z"') || !data.left.includes('900719925474099312345'))throw new Error('JSON sort lost order or precision');
         left.dispatchEvent(new KeyboardEvent('keydown',{key:'z',metaKey:true,bubbles:true,cancelable:true}));await pause();
         if(ed.view.state.doc.toString()!==edited)throw new Error('Diff sort undo failed');

@@ -50,7 +50,9 @@ export class DiffWidget extends WidgetType {
     const status = document.createElement("div");
     status.className = "diff-status";
     status.setAttribute("role", "status");
-    el.append(header, body, status);
+    const toolbar = document.createElement("div");
+    toolbar.className = "diff-toolbar";
+    el.append(toolbar, header, body, status);
     const ui: DiffUI = {
       block: this.block,
       syncing: false,
@@ -94,9 +96,6 @@ export class DiffWidget extends WidgetType {
         ]),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged || ui.syncing) return;
-          const isolate = update.transactions.some((tr) =>
-            tr.isUserEvent("input.diff.format"),
-          );
           queueMicrotask(() => {
             if (ui.disposed || !ui.merge) return;
             const markup = diffMarkup(
@@ -107,7 +106,6 @@ export class DiffWidget extends WidgetType {
             actions.anchor(ui.block.from);
             parent.dispatch({
               changes: { from: ui.block.from, to: ui.block.to, insert: markup },
-              annotations: isolate ? isolateHistory.of("full") : [],
               userEvent: "input.diff",
             });
           });
@@ -120,6 +118,46 @@ export class DiffWidget extends WidgetType {
         highlightChanges: true,
         gutter: true,
       });
+      // 两侧先全部校验，再用一次文档事务提交；任意一侧无效时保留全部原文。
+      for (const [name, label] of [
+        ["format", "格式化 JSON"],
+        ["sort", "JSON 键排序"],
+      ]) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.title = "同时处理左右两侧";
+        button.setAttribute("aria-label", label);
+        button.onclick = () => {
+          const values: string[] = [];
+          for (const [index, view] of [ui.merge!.a, ui.merge!.b].entries()) {
+            try {
+              values.push(
+                formatDiffJSON(view.state.doc.toString(), name === "sort"),
+              );
+            } catch (error) {
+              status.textContent =
+                (index === 0 ? "左侧" : "右侧") +
+                "：" +
+                (error instanceof Error ? error.message : String(error)) +
+                "；两侧均未修改";
+              return;
+            }
+          }
+          const markup = diffMarkup(values[0], values[1]);
+          if (markup !== ui.block.original) {
+            actions.anchor(ui.block.from);
+            parent.dispatch({
+              changes: { from: ui.block.from, to: ui.block.to, insert: markup },
+              annotations: isolateHistory.of("full"),
+              userEvent: "input.diff.format",
+            });
+          }
+          status.textContent =
+            name === "sort" ? "两侧已按键排序" : "两侧已格式化";
+        };
+        toolbar.append(button);
+      }
       for (const [index, label] of ["左侧", "右侧"].entries()) {
         const tools = document.createElement("div");
         tools.className = "diff-side-tools";
@@ -129,8 +167,6 @@ export class DiffWidget extends WidgetType {
         for (const [name, text] of [
           ["find", "查找"],
           ["copy", "复制"],
-          ["format", "格式化 JSON"],
-          ["sort", "JSON 键排序"],
         ]) {
           const button = document.createElement("button");
           button.type = "button";
@@ -162,19 +198,6 @@ export class DiffWidget extends WidgetType {
                   }
                 }
                 status.textContent = label + "已复制";
-              } else {
-                const formatted = formatDiffJSON(source, name === "sort");
-                view.dispatch({
-                  changes: {
-                    from: 0,
-                    to: view.state.doc.length,
-                    insert: formatted,
-                  },
-                  annotations: Transaction.addToHistory.of(false),
-                  userEvent: "input.diff.format",
-                });
-                status.textContent =
-                  label + (name === "sort" ? "已按键排序" : "已格式化");
               }
             } catch (error) {
               status.textContent =
