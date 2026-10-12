@@ -6,6 +6,7 @@ export type DocumentInfo = {
   encoding: string;
   dirty: boolean;
   recovered?: boolean;
+  pageWidth?: string;
 };
 declare global {
   interface Window {
@@ -33,7 +34,8 @@ window.nativeEvent = (name, data) =>
   window.dispatchEvent(new CustomEvent("native:" + name, { detail: data }));
 export const isNative = !!window.webkit?.messageHandlers.bridge;
 let browserText = "",
-  browserName = "未命名.md";
+  browserName = "未命名.md",
+  browserPageWidth = "wide";
 export async function request<T = any>(
   action: string,
   data: Record<string, unknown> = {},
@@ -59,10 +61,9 @@ export async function request<T = any>(
     return {
       sidebarWidth: Number(localStorage.getItem("sidebarWidth")) || 228,
       imagePasteMode: localStorage.getItem("imagePasteMode") ?? "directory",
-      pageWidth: localStorage.getItem("pageWidth") ?? "default",
     } as T;
   if (action === "setPageWidth") {
-    localStorage.setItem("pageWidth", String(data.mode));
+    browserPageWidth = String(data.mode);
     return true as T;
   }
   if (action === "setImagePasteMode") {
@@ -77,6 +78,7 @@ export async function request<T = any>(
   }
   // 浏览器预览只用于开发；文件系统与冲突验收必须使用 macOS 宿主。
   if (action === "loadPreview") {
+    browserPageWidth = "wide";
     browserText = String(data.text);
     browserName = String(data.name);
     return null as T;
@@ -88,6 +90,7 @@ export async function request<T = any>(
       path: null,
       encoding: "utf8",
       dirty: false,
+      pageWidth: browserPageWidth,
     } as T;
   if (action === "change") {
     for (const p of [...(data.patches as Patch[])].sort(

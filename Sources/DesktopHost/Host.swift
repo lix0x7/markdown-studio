@@ -14,6 +14,8 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
     var draftWork: DispatchWorkItem?
     var watch: Timer?
     var closed = false
+    var pageWidthKey: String { "documentPageWidth:" + (url?.standardizedFileURL.path ?? "draft:" + recordID.uuidString) }
+    var pageWidth: String { UserDefaults.standard.string(forKey: pageWidthKey) ?? "wide" }
     var exporter: WebPDFExporter?
     var onClose: (() -> Void)?
     var onNew: (() -> Void)?
@@ -48,7 +50,7 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
     }
     required init?(coder: NSCoder) { fatalError() }
     func metadata(includeText: Bool = false) -> [String: Any] {
-        var info: [String: Any] = ["name": url?.lastPathComponent ?? "未命名.md", "path": url?.path as Any? ?? NSNull(), "encoding": source.encoding.rawValue, "dirty": dirty]
+        var info: [String: Any] = ["name": url?.lastPathComponent ?? "未命名.md", "path": url?.path as Any? ?? NSNull(), "encoding": source.encoding.rawValue, "dirty": dirty, "pageWidth": pageWidth]
         if includeText { info["text"] = source.text }
         return info
     }
@@ -63,12 +65,11 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
             let result: Any
             switch action {
             case "getPreferences":
-                result = ["sidebarWidth": UserDefaults.standard.object(forKey: "sidebarWidth") as? Int ?? 228, "imagePasteMode": UserDefaults.standard.string(forKey: "imagePasteMode") ?? "directory", "pageWidth": UserDefaults.standard.string(forKey: "pageWidth") ?? "default"]
+                result = ["sidebarWidth": UserDefaults.standard.object(forKey: "sidebarWidth") as? Int ?? 228, "imagePasteMode": UserDefaults.standard.string(forKey: "imagePasteMode") ?? "directory"]
             case "setPageWidth":
                 guard let mode = data["mode"] as? String, ["default", "wide", "full"].contains(mode) else { throw Self.error("页面宽度无效。") }
-                UserDefaults.standard.set(mode, forKey: "pageWidth")
-                // 全局布局偏好立即同步到已经打开的文档窗口。
-                for window in NSApp.windows { (window.windowController as? Host)?.event("pageWidth", mode) }
+                UserDefaults.standard.set(mode, forKey: pageWidthKey)
+                event("pageWidth", mode)
                 result = true
             case "setImagePasteMode":
                 guard let mode = data["mode"] as? String, ["directory", "base64"].contains(mode) else { throw Self.error("图片粘贴方式无效。") }
@@ -180,7 +181,10 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
                 guard try copyAssets(from: old, to: destination.deletingLastPathComponent()) else { return false }
             }
             try FileStore.save(source, to: destination, expected: same ? baseline : nil, overwrite: !same)
-            url = destination; baseline = source.data; window?.isDocumentEdited = false; window?.title = destination.lastPathComponent
+            let savedPageWidth = pageWidth
+            url = destination
+            UserDefaults.standard.set(savedPageWidth, forKey: pageWidthKey)
+            baseline = source.data; window?.isDocumentEdited = false; window?.title = destination.lastPathComponent
             try recovery.remove(recordID); return true
         } catch SourceError.conflict {
             let alert = NSAlert(); alert.messageText = "磁盘文件已被修改"; alert.informativeText = "选择另存为以保留两个版本，或明确覆盖磁盘版本。"; alert.addButton(withTitle: "另存为"); alert.addButton(withTitle: "取消"); alert.addButton(withTitle: "覆盖磁盘版本")

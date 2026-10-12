@@ -18,6 +18,21 @@ final class WebVerification {
             let file = root.appendingPathComponent("roundtrip.md")
             try SourceFile(text: original, encoding: .utf8BOM).data.write(to: file)
             host = try Host(url: file, recovery: RecoveryStore(directory: root.appendingPathComponent("Recovery")))
+            // 验证文档宽度按路径隔离，并在重新创建宿主后恢复。
+            if let host {
+                let before = UserDefaults.standard.object(forKey: host.pageWidthKey)
+                defer {
+                    if let before { UserDefaults.standard.set(before, forKey: host.pageWidthKey) }
+                    else { UserDefaults.standard.removeObject(forKey: host.pageWidthKey) }
+                }
+                guard host.pageWidth == "wide" else { fail("New document width is not wide"); return }
+                UserDefaults.standard.set("full", forKey: host.pageWidthKey)
+                let reopened = try Host(url: file, recovery: host.recovery)
+                let other = try Host(recovery: host.recovery)
+                defer { reopened.window?.close(); other.window?.close() }
+                guard reopened.pageWidth == "full", other.pageWidth == "wide", other.pageWidthKey != host.pageWidthKey else { fail("Document width persistence or isolation failed"); return }
+                print("PASS: Document width defaults to wide, persists on reopen and does not affect another document")
+            }
             host?.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
             timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.waitReady() }
@@ -374,6 +389,7 @@ final class WebVerification {
         let script = #"""
         const api=window.editorAPI, ed=api.editor;
         const prefs=await api.request('getPreferences');
+        const docPrefs=await api.request('ready');
         const data='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
         try {
           await api.request('setImagePasteMode',{mode:'directory'});
@@ -408,6 +424,8 @@ final class WebVerification {
           if(!ed.buffer.raw.includes('width="128" height="128"'))throw new Error('Image resize undo failed');
           api.command('settings');await frame();
           if(!document.querySelector('.settings-field select'))throw new Error('Global settings panel missing');
+          if(document.querySelector('[role="dialog"] select[aria-label="页面宽度"]'))throw new Error('Page width still in global settings');
+          document.querySelector('[aria-label="关闭"]').click();await frame();
           const widthSelect=document.querySelector('select[aria-label="页面宽度"]');
           if(!widthSelect || widthSelect.options.length!==3)throw new Error('Page width options missing');
           const app=document.querySelector('.app'), oldWidth=app.style.width, sourceBeforeWidth=ed.buffer.raw;
@@ -417,7 +435,7 @@ final class WebVerification {
             for(const mode of ['default','wide','full']) {
               Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(widthSelect,mode);
               widthSelect.dispatchEvent(new Event('change',{bubbles:true}));await frame();await frame();
-              if((await api.request('getPreferences')).pageWidth!==mode || app.dataset.pageWidth!==mode)throw new Error('Page width did not persist or apply: '+mode);
+              if((await api.request('ready')).pageWidth!==mode || app.dataset.pageWidth!==mode)throw new Error('Page width did not persist or apply: '+mode);
               widths.push(ed.view.contentDOM.getBoundingClientRect().width);
             }
             if(Math.abs(widths[0]-796)>1 || Math.abs(widths[1]-1100)>1 || widths[2]<=widths[1])throw new Error('Page widths incorrect: '+widths);
@@ -426,9 +444,8 @@ final class WebVerification {
             if(app.dataset.pageWidth!=='default' || widthSelect.value!=='default')throw new Error('Native preference broadcast not applied');
           } finally {
             app.style.width=oldWidth;
-            await api.request('setPageWidth',{mode:prefs.pageWidth ?? 'default'});await frame();
+            await api.request('setPageWidth',{mode:docPrefs.pageWidth ?? 'wide'});await frame();
           }
-          document.querySelector('[aria-label="关闭"]').click();
           return ref+'; base64, alignment, proportional resize, undo, settings and page widths passed';
         } finally { await api.request('setImagePasteMode',{mode:prefs.imagePasteMode ?? 'directory'}); }
 
