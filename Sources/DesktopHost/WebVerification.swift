@@ -57,12 +57,20 @@ final class WebVerification {
         check(ed.view.state.doc.line(ed.view.state.selection.main.head===0?1:ed.view.state.doc.lineAt(ed.view.state.selection.main.head).number).text==='','Double click on blank area inserts an empty line and places caret');
         check(ed.buffer.raw===saved.replace('\r\n','\r\n\r\n'),'Blank line insertion preserves surrounding mixed line endings');
         ed.undo();check(ed.buffer.raw===saved,'Blank line insertion is undoable');
-        const fixture='\n```json\n{\n  "first": "alpha",\n  "second": "beta",\n  "third": 3\n}\n```\n';
+        const fixture='\n```json\n\n\n{\n  "first": "alpha",\n  "second": "beta",\n  "third": 3\n}\n```\n';
         const end=ed.view.state.doc.length;
         ed.view.dispatch({changes:{from:end,insert:fixture},userEvent:'input'});
         const start=end+fixture.indexOf('"first"'),finish=end+fixture.indexOf('"third"');
         ed.view.dispatch({selection:{anchor:start,head:finish},scrollIntoView:true});ed.view.focus();
         await nextFrame();
+        const scroller=ed.view.scrollDOM.getBoundingClientRect();
+        for(const line of ed.view.contentDOM.querySelectorAll('.md-code-line')) {
+          const rect=line.getBoundingClientRect(), y=(rect.top+rect.bottom)/2;
+          if(y<=scroller.top || y>=scroller.bottom)continue;
+          const actualLine=ed.view.state.doc.lineAt(ed.view.posAtDOM(line,0)).number;
+          const hit=ed.view.posAtCoords({x:rect.left+100,y});
+          check(hit!==null && ed.view.state.doc.lineAt(hit).number===actualLine,`Code click row matches rendered row ${actualLine}; hit ${hit===null?'null':ed.view.state.doc.lineAt(hit).number}`);
+        }
         const expected=ed.view.state.sliceDoc(start,finish);
         check(window.getSelection().toString()===expected,'Native WebKit selection matches multiline code range');
         check(!ed.view.dom.querySelector('.cm-selectionLayer'),'No independent selection layer hidden behind code backgrounds');

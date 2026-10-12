@@ -492,7 +492,9 @@ main {
   position: relative;
   font-size: 14px;
   line-height: 1.8;
-  margin: 12px 0 18px;
+  /* 块组件的间距必须计入自身高度，否则 CodeMirror 点击行坐标会偏移。 */
+  margin: 0;
+  padding: 12px 0 18px;
 }
 .md-widget table {
   border-collapse: separate;
