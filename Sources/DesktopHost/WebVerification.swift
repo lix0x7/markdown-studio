@@ -79,6 +79,17 @@ final class WebVerification {
         ed.toggle();await nextFrame();
         check(window.getSelection().toString()===expected,'Source mode retains native selected text');
         ed.toggle();ed.undo();check(ed.buffer.raw===saved,'Selection checks do not change saved source');
+        const preferences=await api.request('getPreferences');
+        try {
+          const separator=document.querySelector('[role="separator"][aria-label="调整文档大纲宽度"]');
+          separator.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true,cancelable:true}));await nextFrame();
+          separator.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));await nextFrame();
+          check(Math.abs(document.querySelector('.sidebar').getBoundingClientRect().width-190)<1,'Sidebar separator updates measured width');
+          check((await api.request('getPreferences')).sidebarWidth===190,'Sidebar width persists through native preferences');
+          separator.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true,cancelable:true}));await nextFrame();
+          check(document.querySelector('main').getBoundingClientRect().width>=560,'Sidebar maximum preserves writing area');
+          check(ed.buffer.raw===saved,'Resizing sidebar leaves document unchanged');
+        } finally { await api.request('setSidebarWidth',{width:preferences.sidebarWidth}); }
         await api.request('ready');
         return results;
         """#

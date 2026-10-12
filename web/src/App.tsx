@@ -108,6 +108,24 @@ export default function App() {
     [count, setCount] = useState(0),
     [empty, setEmpty] = useState(true),
     [active, setActive] = useState(0);
+  const [sidebarWidth, setSidebarWidth] = useState(228);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const drag = useRef<{ x: number; width: number } | null>(null);
+  const maxSidebar = Math.max(180, Math.min(420, windowWidth - 560));
+  const visibleSidebarWidth = Math.min(sidebarWidth, maxSidebar);
+  const saveSidebarWidth = (width: number) => {
+    void request("setSidebarWidth", { width }).catch((e) =>
+      setError(e.message),
+    );
+  };
+  useEffect(() => {
+    void request<{ sidebarWidth: number }>("getPreferences")
+      .then((p) => setSidebarWidth(p.sidebarWidth))
+      .catch((e) => setError(e.message));
+    const resize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
@@ -539,7 +557,12 @@ export default function App() {
     setModal(null);
   }
   return (
-    <div className={"app" + (!sidebar ? " sidebar-hidden" : "")}>
+    <div
+      className={"app" + (!sidebar ? " sidebar-hidden" : "")}
+      style={{
+        gridTemplateColumns: `${sidebar && windowWidth > 760 ? visibleSidebarWidth : 0}px minmax(0, 1fr)`,
+      }}
+    >
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-icon">
@@ -592,6 +615,66 @@ export default function App() {
           <span className="local-dot" />
           文件保存在本机
         </div>
+        <div
+          className="sidebar-resizer"
+          role="separator"
+          aria-label="调整文档大纲宽度"
+          aria-orientation="vertical"
+          aria-valuemin={180}
+          aria-valuemax={maxSidebar}
+          aria-valuenow={visibleSidebarWidth}
+          tabIndex={sidebar ? 0 : -1}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            drag.current = { x: e.clientX, width: visibleSidebarWidth };
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (!drag.current) return;
+            setSidebarWidth(
+              Math.round(
+                Math.max(
+                  180,
+                  Math.min(
+                    maxSidebar,
+                    drag.current.width + e.clientX - drag.current.x,
+                  ),
+                ),
+              ),
+            );
+          }}
+          onPointerUp={(e) => {
+            if (!drag.current) return;
+            drag.current = null;
+            e.currentTarget.releasePointerCapture(e.pointerId);
+            saveSidebarWidth(visibleSidebarWidth);
+          }}
+          onPointerCancel={() => {
+            drag.current = null;
+            saveSidebarWidth(visibleSidebarWidth);
+          }}
+          onLostPointerCapture={() => {
+            drag.current = null;
+          }}
+          onDoubleClick={() => {
+            setSidebarWidth(228);
+            saveSidebarWidth(228);
+          }}
+          onKeyDown={(e) => {
+            const values: Record<string, number> = {
+              ArrowLeft: visibleSidebarWidth - 10,
+              ArrowRight: visibleSidebarWidth + 10,
+              Home: 180,
+              End: maxSidebar,
+            };
+            if (!(e.key in values)) return;
+            e.preventDefault();
+            const width = Math.max(180, Math.min(maxSidebar, values[e.key]));
+            setSidebarWidth(width);
+            saveSidebarWidth(width);
+          }}
+        />
       </aside>
       <main>
         <header className="topbar">

@@ -96,6 +96,7 @@ kbd {
   visibility: hidden;
 }
 .sidebar {
+  position: relative;
   background: var(--side);
   border-right: 1px solid var(--line);
   display: flex;
@@ -983,4 +984,24 @@ footer svg {
 }
 .md-widget [align="left"] {
   text-align: left;
+}
+
+/* 分隔线位于侧栏内部，拖动时不选中文字，键盘焦点也保持可见。 */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 7px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 3;
+}
+.sidebar-resizer:hover,
+.sidebar-resizer:focus-visible,
+.sidebar-resizer:active {
+  background: var(--accent-soft);
+  border-right: 2px solid var(--accent);
+  outline: none;
 }

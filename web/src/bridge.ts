@@ -45,6 +45,14 @@ export async function request<T = any>(
       window.webkit!.messageHandlers.bridge.postMessage({ id, action, data });
     });
   }
+  if (action === "getPreferences")
+    return {
+      sidebarWidth: Number(localStorage.getItem("sidebarWidth")) || 228,
+    } as T;
+  if (action === "setSidebarWidth") {
+    localStorage.setItem("sidebarWidth", String(data.width));
+    return true as T;
+  }
   // 浏览器预览只用于开发；文件系统与冲突验收必须使用 macOS 宿主。
   if (action === "loadPreview") {
     browserText = String(data.text);

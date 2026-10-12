@@ -62,6 +62,11 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
         do {
             let result: Any
             switch action {
+            case "getPreferences":
+                result = ["sidebarWidth": UserDefaults.standard.object(forKey: "sidebarWidth") as? Int ?? 228]
+            case "setSidebarWidth":
+                guard let width = data["width"] as? Int, (180...420).contains(width) else { throw Self.error("侧栏宽度超出范围。") }
+                UserDefaults.standard.set(width, forKey: "sidebarWidth"); result = true
             case "ready": var info = metadata(includeText: true); info["recovered"] = dirty; result = info
             case "change":
                 guard let patches = data["patches"] as? [[String: Any]] else { throw SourceError.invalidRange }
