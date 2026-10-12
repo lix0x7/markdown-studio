@@ -188,9 +188,10 @@ kbd {
 .heading-level {
   color: var(--muted);
   font-size: 11px;
-  width: 10px;
+  width: 22px;
   flex-shrink: 0;
-  font-weight: 400;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 .outline-item.selected {
   background: var(--accent-soft);

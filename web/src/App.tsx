@@ -591,15 +591,13 @@ export default function App() {
               <button
                 key={h.from}
                 className={"outline-item " + (active === i ? "selected" : "")}
-                style={{ paddingLeft: 14 + (h.level - 1) * 12 }}
+                style={{ paddingLeft: 12 + (h.level - 1) * 16 }}
                 onClick={() => {
                   setActive(i);
                   editor.current?.jump(h.from);
                 }}
               >
-                <span className="heading-level">
-                  {h.level === 1 ? "#" : "·"}
-                </span>
+                <span className="heading-level">H{h.level}</span>
                 <span>{h.title}</span>
               </button>
             ))
