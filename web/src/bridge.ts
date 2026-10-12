@@ -39,11 +39,20 @@ export async function request<T = any>(
   data: Record<string, unknown> = {},
 ): Promise<T> {
   if (isNative) {
-    return new Promise((resolve, reject) => {
-      const id = ++next;
-      pending.set(id, { resolve, reject });
-      window.webkit!.messageHandlers.bridge.postMessage({ id, action, data });
-    });
+    try {
+      return await new Promise<T>((resolve, reject) => {
+        const id = ++next;
+        pending.set(id, { resolve, reject });
+        window.webkit!.messageHandlers.bridge.postMessage({ id, action, data });
+      });
+    } catch (error) {
+      // 运行中的旧宿主可能加载新版前端；仅为不支持的侧栏偏好接口使用本地存储。
+      if (
+        !["getPreferences", "setSidebarWidth"].includes(action) ||
+        !(error instanceof Error) ||
+        error.message !== `不支持的操作：${action}`
+      ) throw error;
+    }
   }
   if (action === "getPreferences")
     return {
