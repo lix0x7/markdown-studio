@@ -20,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let url, let existing = windows.first(where: { $0.url?.standardizedFileURL == url.standardizedFileURL }) { existing.showWindow(nil); return }
         let controller = try Host(url: url, record: record, recovery: recovery)
         windows.append(controller)
+        controller.web.onOpenDocuments = { [weak self] urls in
+            for url in urls { self?.open(url) }
+        }
         controller.onClose = { [weak self, weak controller] in self?.windows.removeAll { $0 === controller } }
         controller.onNew = { [weak self] in self?.newDocument(nil) }; controller.onOpen = { [weak self] in self?.openDocument(nil) }; controller.showWindow(nil)
     }

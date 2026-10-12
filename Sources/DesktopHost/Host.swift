@@ -10,7 +10,7 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
     var baseline: Data?
     let recordID: UUID
     let recovery: RecoveryStore
-    let web: WKWebView
+    let web: DocumentWebView
     var draftWork: DispatchWorkItem?
     var watch: Timer?
     var closed = false
@@ -27,7 +27,7 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
         if let record { source = record.source; baseline = record.baseline }
         else if let url { let data = try Data(contentsOf: url); source = try SourceFile(data: data); baseline = data }
         else { source = SourceFile() }
-        web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        web = DocumentWebView(frame: .zero, configuration: WKWebViewConfiguration())
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 820), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         super.init(window: window)
         window.minSize = NSSize(width: 760, height: 520)
@@ -36,6 +36,7 @@ final class Host: NSWindowController, NSWindowDelegate, WKScriptMessageHandler, 
         window.setFrameAutosaveName("MarkdownNativeWebEditor")
         window.contentView = web
         web.navigationDelegate = self
+        web.registerForDraggedTypes([.fileURL])
         if CommandLine.arguments.contains("--verify") { web.configuration.userContentController.addUserScript(WKUserScript(source: "window.__VERIFY=true", injectionTime: .atDocumentStart, forMainFrameOnly: true)) }
         web.configuration.userContentController.add(self, name: "bridge")
         let index = Bundle.main.resourceURL!.appendingPathComponent("web/index.html")

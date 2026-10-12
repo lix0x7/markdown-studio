@@ -6,6 +6,8 @@
 
 以下为当前 **Markdown Studio 前端重写版**的 macOS 应用实拍，采用 React + CodeMirror 6 + Radix，运行在原生 WKWebView 宿主中。当前构建与启动方法见 [DEVELOPMENT.md](DEVELOPMENT.md)，验收记录见 [VALIDATION.md](VALIDATION.md)；下方原有章节保留的是早期纯 AppKit 版本说明。
 
+支持将 `.md`、`.markdown`、`.txt` 文件拖到应用界面，在独立窗口打开（多文件逐个打开，已打开文件激活已有窗口）；当前文档及未保存修改保持不变。拖入图片仍用于插图。
+
 ### 写作与文档大纲
 
 在同一区域输入和预览 Markdown，左侧大纲用于定位标题，顶部提供格式操作、保存和导出。

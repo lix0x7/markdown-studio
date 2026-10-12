@@ -26,8 +26,8 @@ final class WebVerification {
         attempts += 1
         if attempts > 200 { fail("Frontend did not initialize"); return }
         host?.web.evaluateJavaScript("Boolean(window.editorAPI)") { [weak self] value, error in
-            guard let self, value as? Bool == true else { return }
-            self.timer?.invalidate(); self.runEditorChecks()
+            guard let self, self.timer != nil, value as? Bool == true else { return }
+            self.timer?.invalidate(); self.timer = nil; self.runEditorChecks()
         }
     }
     func runEditorChecks() {
@@ -62,10 +62,41 @@ final class WebVerification {
                     let data = try Data(contentsOf: self.root.appendingPathComponent("roundtrip.md"))
                     guard data == SourceFile(text: self.original.replacingOccurrences(of: "plain", with: "**plain**"), encoding: .utf8BOM).data else { self.fail("Byte fidelity mismatch"); return }
                     print("PASS: Saved bytes differ only at selected text and retain BOM")
+                    try self.verifyDocumentDrop()
                     self.benchmark()
                 } catch { self.fail(String(describing: (error as NSError).userInfo)) }
             }
         }
+    }
+    // 使用独立拖放剪贴板验证真实路径、多文件及图片回退，避免改动系统剪贴板。
+    func verifyDocumentDrop() throws {
+        guard let host else { throw Host.error("Missing host") }
+        let before = host.source.data
+        let first = root.appendingPathComponent("拖入文档.MD")
+        let second = root.appendingPathComponent("second.markdown")
+        try Data("# 拖入文档\n".utf8).write(to: first)
+        try Data("# Second\n".utf8).write(to: second)
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        var opened: [Host] = []
+        var failure: Error?
+        host.web.onOpenDocuments = { urls in
+            do { for url in urls { opened.append(try Host(url: url, recovery: host.recovery)) } }
+            catch { failure = error }
+        }
+        defer { host.web.onOpenDocuments = nil; opened.forEach { $0.close() } }
+        board.writeObjects([first.absoluteURL as NSURL, second.absoluteURL as NSURL])
+        let accepted = host.web.openDroppedDocuments(from: board)
+        guard accepted, failure == nil,
+              opened.count == 2, opened[0].url?.standardizedFileURL == first.standardizedFileURL,
+              opened[0].source.text == "# 拖入文档\n", host.source.data == before,
+              opened.allSatisfy({ $0.window !== host.window }) else {
+            throw Host.error("Document drop failed: accepted=\(accepted), opened=\(opened.count), error=\(String(describing: failure)), paths=\(opened.compactMap { $0.url?.path }), expected=\(first.path)")
+        }
+        board.clearContents()
+        board.writeObjects([root.appendingPathComponent("image.png").absoluteURL as NSURL])
+        guard !host.web.openDroppedDocuments(from: board) else { throw Host.error("Image drop intercepted") }
+        print("PASS: Native document drop opens separate document hosts and preserves current text; images fall through")
     }
     func benchmark() {
         let text = String(repeating: "# Heading\n\nA paragraph with **bold**, 中文 and `code`.  \n\n```js\nconst x = 42;\n```\n\n", count: 13000)
