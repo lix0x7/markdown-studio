@@ -346,3 +346,61 @@ describe("table preview layout", () => {
     expect(ed.view.state.doc.toString()).toBe(prefix + table + "\n\nAfter");
   });
 });
+
+describe.each([false, true])("move lines (source mode: %s)", (sourceMode) => {
+  it("moves the current line with Alt+arrows and restores source and caret on undo", () => {
+    const raw = "first\r\nsecond\r\nthird";
+    const { ed, disk } = create(raw);
+    if (sourceMode) ed.toggle();
+    ed.view.dispatch({ selection: { anchor: 8 } });
+    const up = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    ed.view.contentDOM.dispatchEvent(up);
+    expect(up.defaultPrevented).toBe(true);
+    expect(disk()).toBe("second\r\nfirst\r\nthird");
+    expect(ed.view.state.selection.main.head).toBe(2);
+    ed.undo();
+    expect(disk()).toBe(raw);
+    expect(ed.view.state.selection.main.head).toBe(8);
+    const down = new KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    ed.view.contentDOM.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(disk()).toBe("first\r\nthird\r\nsecond");
+    ed.undo();
+    expect(disk()).toBe(raw);
+  });
+
+  it("moves selected lines together and consumes the shortcut at document boundaries", () => {
+    const { ed, disk } = create("first\nsecond\nthird\nlast");
+    if (sourceMode) ed.toggle();
+    ed.view.dispatch({ selection: { anchor: 6, head: 19 } });
+    const up = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    ed.view.contentDOM.dispatchEvent(up);
+    expect(disk()).toBe("second\nthird\nfirst\nlast");
+    const boundary = new KeyboardEvent("keydown", {
+      key: "ArrowUp",
+      altKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    ed.view.contentDOM.dispatchEvent(boundary);
+    expect(boundary.defaultPrevented).toBe(true);
+    expect(disk()).toBe("second\nthird\nfirst\nlast");
+    ed.undo();
+    expect(disk()).toBe("first\nsecond\nthird\nlast");
+  });
+});

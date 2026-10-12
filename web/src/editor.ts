@@ -20,6 +20,8 @@ import {
   history,
   historyKeymap,
   defaultKeymap,
+  moveLineUp,
+  moveLineDown,
   indentWithTab,
   undo,
   redo,
@@ -1015,6 +1017,8 @@ export class MarkdownEditor {
             return { effects: restoreEndings.of(result) };
           }),
           keymap.of([
+            { key: "Alt-ArrowUp", run: moveLineUp, preventDefault: true },
+            { key: "Alt-ArrowDown", run: moveLineDown, preventDefault: true },
             {
               key: "Backspace",
               run: () => {
