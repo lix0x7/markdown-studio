@@ -51,3 +51,36 @@ export function pasteTable(
   );
   return { rows, aligns };
 }
+
+// 批量插入一次生成完整草稿，表头、原有单元格及列对齐保持不变。
+export function insertTable(
+  draft: TableDraft,
+  axis: "rows" | "columns",
+  at: number,
+  count: number,
+): TableDraft {
+  if (!Number.isInteger(count) || count < 1 || count > 1000)
+    throw new Error("插入数量须为 1–1000 的整数");
+  if (axis === "rows") {
+    const rows = [...draft.rows];
+    rows.splice(
+      at,
+      0,
+      ...Array.from({ length: count }, () =>
+        Array(draft.aligns.length).fill(""),
+      ),
+    );
+    return { ...draft, rows };
+  }
+  const rows = draft.rows.map((row) => [
+    ...row.slice(0, at),
+    ...Array(count).fill(""),
+    ...row.slice(at),
+  ]);
+  const aligns = [
+    ...draft.aligns.slice(0, at),
+    ...Array(count).fill("left"),
+    ...draft.aligns.slice(at),
+  ];
+  return { rows, aligns };
+}

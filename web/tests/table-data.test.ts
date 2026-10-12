@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { sortTable, pasteTable } from "../src/table-data";
+import { sortTable, pasteTable, insertTable } from "../src/table-data";
 it("sorts numeric data as whole rows, keeps the header and empty values last", () => {
   const d = {
     aligns: ["right", "left"],
@@ -57,4 +57,37 @@ it("expands pasted rectangles while retaining surrounding cells and alignments",
   ]);
   expect(next.aligns).toEqual(["center", "right", "left"]);
   expect(d.rows[1][1]).toBe("old");
+});
+
+it("inserts N rows or columns without changing existing cells or alignment", () => {
+  const draft = {
+    rows: [
+      ["A", "B"],
+      ["a", "b"],
+    ],
+    aligns: ["right", "center"],
+  };
+  const rows = insertTable(draft, "rows", 1, 3);
+  expect(rows.rows).toEqual([
+    ["A", "B"],
+    ["", ""],
+    ["", ""],
+    ["", ""],
+    ["a", "b"],
+  ]);
+  expect(rows.rows[1]).not.toBe(rows.rows[2]);
+  const columns = insertTable(draft, "columns", 1, 2);
+  expect(columns.rows).toEqual([
+    ["A", "", "", "B"],
+    ["a", "", "", "b"],
+  ]);
+  expect(columns.aligns).toEqual(["right", "left", "left", "center"]);
+  expect(insertTable(draft, "columns", 0, 1).rows[0]).toEqual(["", "A", "B"]);
+  expect(insertTable(draft, "rows", 2, 1).rows[2]).toEqual(["", ""]);
+  expect(draft.rows).toEqual([
+    ["A", "B"],
+    ["a", "b"],
+  ]);
+  for (const count of [0, -1, 1.5, 1001, NaN])
+    expect(() => insertTable(draft, "rows", 1, count)).toThrow();
 });

@@ -1363,3 +1363,21 @@ footer svg {
   max-width: 100%;
   overscroll-behavior-x: contain;
 }
+
+.table-insert-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.table-insert-count input {
+  width: 64px;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--text);
+}
+.table-insert-count input[aria-invalid="true"] {
+  border-color: #c34b42;
+}

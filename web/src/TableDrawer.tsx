@@ -16,7 +16,12 @@ import {
 } from "@phosphor-icons/react";
 import type { TableModel } from "./source";
 
-import { sortTable, pasteTable, type TableDraft as Draft } from "./table-data";
+import {
+  sortTable,
+  pasteTable,
+  insertTable,
+  type TableDraft as Draft,
+} from "./table-data";
 type RowAction = "before" | "after" | "delete" | "up" | "down";
 type ColumnAction =
   "before" | "after" | "delete" | "left" | "right" | "ascending" | "descending";
@@ -42,6 +47,10 @@ export default function TableDrawer({
   );
   const [draft, setDraft] = useState(initial),
     [widths, setWidths] = useState<number[]>([]);
+  const [insertQuantity, setInsertQuantity] = useState("1");
+  const insertCount = Number(insertQuantity);
+  const validInsertCount =
+    Number.isInteger(insertCount) && insertCount >= 1 && insertCount <= 1000;
   const sync = useRef(onChange);
   sync.current = onChange;
   const [selection, setSelection] = useState<GridSelection>({
@@ -250,6 +259,8 @@ export default function TableDrawer({
   };
   const changeRow = (action: RowAction, at = row) => {
     setRowMenu(null);
+    if ((action === "before" || action === "after") && !validInsertCount)
+      return;
     if (action === "delete" && selection.rows.length > 1) {
       const rows = draft.rows.filter(
         (_, i) => i === 0 || !selection.rows.hasIndex(i),
@@ -267,9 +278,9 @@ export default function TableDrawer({
     }
     const index = action === "after" ? at + 1 : at;
     if (index === 0) return;
-    const rows = [...draft.rows];
+    let rows = [...draft.rows];
     if (action === "delete") rows.splice(index, 1);
-    else rows.splice(index, 0, Array(draft.aligns.length).fill(""));
+    else rows = insertTable(draft, "rows", index, insertCount).rows;
     update({ ...draft, rows });
     setSelection({
       rows: CompactSelection.fromSingleSelection(
@@ -280,8 +291,16 @@ export default function TableDrawer({
   };
   const rowActions: { action: RowAction; label: string; disabled: boolean }[] =
     [
-      { action: "before", label: "上方插入行", disabled: row === 0 },
-      { action: "after", label: "下方插入行", disabled: false },
+      {
+        action: "before",
+        label: `上方插入${insertCount === 1 ? "" : insertQuantity}行`,
+        disabled: row === 0 || !validInsertCount,
+      },
+      {
+        action: "after",
+        label: `下方插入${insertCount === 1 ? "" : insertQuantity}行`,
+        disabled: !validInsertCount,
+      },
       {
         action: "delete",
         label: "删除行",
@@ -320,6 +339,8 @@ export default function TableDrawer({
   };
   const changeColumn = (action: ColumnAction, at = column) => {
     setColumnMenu(null);
+    if ((action === "before" || action === "after") && !validInsertCount)
+      return;
     if (action === "delete" && selection.columns.length > 1) {
       const order = draft.aligns
         .map((_, i) => i)
@@ -345,7 +366,7 @@ export default function TableDrawer({
       return;
     }
     const index = action === "after" ? at + 1 : at;
-    const rows = draft.rows.map((r) => [...r]),
+    let rows = draft.rows.map((r) => [...r]),
       aligns = [...draft.aligns];
     const nextWidths = draft.aligns.map((_, i) => widths[i] ?? 200);
     if (action === "delete") {
@@ -353,9 +374,8 @@ export default function TableDrawer({
       aligns.splice(index, 1);
       nextWidths.splice(index, 1);
     } else {
-      rows.forEach((r) => r.splice(index, 0, ""));
-      aligns.splice(index, 0, "left");
-      nextWidths.splice(index, 0, 200);
+      ({ rows, aligns } = insertTable(draft, "columns", index, insertCount));
+      nextWidths.splice(index, 0, ...Array(insertCount).fill(200));
     }
     update({ rows, aligns });
     setWidths(nextWidths);
@@ -377,8 +397,16 @@ export default function TableDrawer({
       label: "降序排列",
       disabled: draft.rows.length < 3,
     },
-    { action: "before", label: "左侧插入列", disabled: false },
-    { action: "after", label: "右侧插入列", disabled: false },
+    {
+      action: "before",
+      label: `左侧插入${insertCount === 1 ? "" : insertQuantity}列`,
+      disabled: !validInsertCount,
+    },
+    {
+      action: "after",
+      label: `右侧插入${insertCount === 1 ? "" : insertQuantity}列`,
+      disabled: !validInsertCount,
+    },
     {
       action: "delete",
       label: "删除列",
@@ -438,6 +466,20 @@ export default function TableDrawer({
             </button>
           </header>
           <div className="table-drawer-toolbar">
+            <label className="table-insert-count">
+              插入数量
+              <input
+                type="number"
+                aria-label="插入行列数量"
+                min={1}
+                max={1000}
+                step={1}
+                title="每次插入 1–1000 行或列"
+                value={insertQuantity}
+                aria-invalid={!validInsertCount}
+                onChange={(event) => setInsertQuantity(event.target.value)}
+              />
+            </label>
             {rowActions.map(({ action, label, disabled }) => (
               <button
                 key={action}
