@@ -13,6 +13,7 @@
   --muted: #747c76;
   --accent: #3d7259;
   --accent-soft: #e5eee7;
+  --selection: #c6dfd0;
   --shadow: 0 16px 60px #172b2024;
   color-scheme: light dark;
 }
@@ -79,7 +80,7 @@ kbd {
   margin-left: auto;
 }
 ::selection {
-  background: #d7e8dc;
+  background: var(--selection);
 }
 .app {
   height: 100dvh;
@@ -381,7 +382,7 @@ main {
   width: 100%;
   margin: 0 auto;
   padding: 46px 44px 180px !important;
-  caret-color: var(--accent);
+  caret-color: var(--accent) !important;
 }
 .cm-line {
   padding: 0 !important;
@@ -389,9 +390,9 @@ main {
 .cm-cursor {
   border-left-color: var(--accent) !important;
 }
-.cm-selectionBackground,
-.cm-focused .cm-selectionBackground {
-  background: var(--accent-soft) !important;
+.cm-editor .cm-content ::selection,
+.cm-editor .cm-content::selection {
+  background: var(--selection);
 }
 .cm-activeLine {
   background: transparent !important;
@@ -934,6 +935,7 @@ footer svg {
     --muted: #a1ada3;
     --accent: #a0c7ad;
     --accent-soft: #31483a;
+    --selection: #395f50;
     --shadow: 0 16px 60px #0005;
     background: var(--paper);
     color: var(--text);

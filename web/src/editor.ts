@@ -12,7 +12,6 @@ import {
   WidgetType,
   ViewPlugin,
   keymap,
-  drawSelection,
   dropCursor,
   type DecorationSet,
 } from "@codemirror/view";
@@ -341,7 +340,7 @@ export class MarkdownEditor {
             "No matches": "没有匹配项",
           }),
           history(),
-          drawSelection(),
+          // 使用浏览器原生选区，避免独立选区层被代码块背景遮住。
           dropCursor(),
           bracketMatching(),
           highlightSelectionMatches(),
