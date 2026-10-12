@@ -127,6 +127,31 @@ final class WebVerification {
         cellEditor.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await nextFrame();
         // 撤销/重做一次恢复首个单元格，继续既有单元格提交验证。
         api.command('redo');await nextFrame();api.command('undo');await nextFrame();
+        // 使用隔离剪贴板验证网格事件，避免改动用户系统剪贴板。
+        const clipboardDescriptor=Object.getOwnPropertyDescriptor(navigator,'clipboard');
+        Object.defineProperty(navigator,'clipboard',{configurable:true,value:{}});
+        try {
+          canvas.focus();
+          const pasted='数量\t名称\t备注\n10\t十\tA\n2\t二\tB\n\t空\tC';
+          const pasteData=new DataTransfer();pasteData.setData('text/plain',pasted);
+          canvas.dispatchEvent(new ClipboardEvent('paste',{clipboardData:pasteData,bubbles:true,cancelable:true}));await nextFrame();
+          check(drawer.querySelector('.table-drawer-footer').textContent.includes('4 行 × 3 列'),'Rectangle paste expands rows and columns');
+          const copied=new DataTransfer();
+          canvas.dispatchEvent(new ClipboardEvent('copy',{clipboardData:copied,bubbles:true,cancelable:true}));await nextFrame();
+          check(copied.getData('text/plain')===pasted,'Selected rectangle copies as TSV');
+          tableButton('升序排列').click();await nextFrame();
+          canvas.focus();const ascending=new DataTransfer();canvas.dispatchEvent(new ClipboardEvent('copy',{clipboardData:ascending,bubbles:true,cancelable:true}));await nextFrame();
+          check(ascending.getData('text/plain')==='数量\t名称\t备注\n2\t二\tB\n10\t十\tA\n\t空\tC','Ascending sort keeps header and sorts whole numeric rows');
+          tableButton('降序排列').click();await nextFrame();
+          canvas.focus();const descending=new DataTransfer();canvas.dispatchEvent(new ClipboardEvent('copy',{clipboardData:descending,bubbles:true,cancelable:true}));await nextFrame();
+          check(descending.getData('text/plain')===pasted,'Descending sort keeps empty values last');
+          api.command('undo');await nextFrame();api.command('undo');await nextFrame();api.command('undo');await nextFrame();
+          check(drawer.querySelector('.table-drawer-footer').textContent.includes('2 行 × 2 列'),'Paste and sorts each undo in one step');
+          check(ed.buffer.raw===saved,'Clipboard and sorting leave source untouched until apply');
+        } finally {
+          if(clipboardDescriptor) Object.defineProperty(navigator,'clipboard',clipboardDescriptor);
+          else delete navigator.clipboard;
+        }
         setCell('renamed');await nextFrame();
         check(ed.buffer.raw===saved,'Table draft edits do not modify document before applying');
         api.command('undo');await nextFrame();

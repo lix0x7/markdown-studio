@@ -16,8 +16,9 @@ import {
 } from "@phosphor-icons/react";
 import type { TableModel } from "./source";
 
-type Draft = { rows: string[][]; aligns: string[] };
-type ColumnAction = "before" | "after" | "delete" | "left" | "right";
+import { sortTable, pasteTable, type TableDraft as Draft } from "./table-data";
+type ColumnAction =
+  "before" | "after" | "delete" | "left" | "right" | "ascending" | "descending";
 export default function TableDrawer({
   table,
   close,
@@ -210,6 +211,10 @@ export default function TableDrawer({
   };
   const changeColumn = (action: ColumnAction, at = column) => {
     setColumnMenu(null);
+    if (action === "ascending" || action === "descending") {
+      update(sortTable(current.current, at, action === "descending"));
+      return;
+    }
     if (action === "left" || action === "right") {
       moveColumn(at, at + (action === "left" ? -1 : 1));
       return;
@@ -241,6 +246,12 @@ export default function TableDrawer({
     label: string;
     disabled: boolean;
   }[] = [
+    { action: "ascending", label: "升序排列", disabled: draft.rows.length < 3 },
+    {
+      action: "descending",
+      label: "降序排列",
+      disabled: draft.rows.length < 3,
+    },
     { action: "before", label: "左侧插入列", disabled: false },
     { action: "after", label: "右侧插入列", disabled: false },
     { action: "delete", label: "删除列", disabled: draft.aligns.length === 1 },
@@ -277,7 +288,7 @@ export default function TableDrawer({
               <Dialog.Title>编辑表格</Dialog.Title>
               <Dialog.Description>
                 首行为表头 · F2 / 双击编辑 · Enter / Tab 连续编辑 · 拖动列头排序
-                · 右键列头操作
+                · 右键列头操作 · 框选后 ⌘C / ⌘V 复制粘贴
               </Dialog.Description>
             </div>
             <button
@@ -403,7 +414,27 @@ export default function TableDrawer({
               getCellContent={getCell}
               getCellsForSelection={true}
               onCellsEdited={editCells}
-              onPaste={true}
+              onPaste={(target, values) => {
+                if (!values.length || !values.some((r) => r.length))
+                  return false;
+                const [col, row] = target;
+                update(pasteTable(current.current, col, row, values));
+                setSelection({
+                  columns: CompactSelection.empty(),
+                  rows: CompactSelection.empty(),
+                  current: {
+                    cell: target,
+                    range: {
+                      x: col,
+                      y: row,
+                      width: Math.max(...values.map((r) => r.length)),
+                      height: values.length,
+                    },
+                    rangeStack: [],
+                  },
+                });
+                return false;
+              }}
               gridSelection={selection}
               onGridSelectionChange={setSelection}
               onColumnResize={(_, width, index) =>
