@@ -86,6 +86,10 @@ final class WebVerification {
         search.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true,cancelable:true}));await pause();
         if(window.getSelection().toString()!=='900719925474099312345')throw new Error('Diff find did not select matching text');
         search.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await pause();
+        widget.querySelector('[aria-label="全屏代码对比"]').click();await pause();
+        const dialog=widget.querySelector('dialog');
+        if(!dialog.open || Math.abs(dialog.getBoundingClientRect().width-window.innerWidth)>2 || Math.abs(dialog.getBoundingClientRect().height-window.innerHeight)>2)throw new Error('Diff did not fill window');
+        if(widget.querySelector('[aria-label="Diff 左侧代码"]')!==left)throw new Error('Fullscreen recreated editor');
         const edited=ed.view.state.doc.toString();
         widget.querySelector('[aria-label="JSON 键排序"]').click();await pause();
         const data=JSON.parse(ed.view.state.doc.toString().split('```md-diff\n')[1].split('\n```')[0]);
@@ -94,6 +98,8 @@ final class WebVerification {
         left.dispatchEvent(new KeyboardEvent('keydown',{key:'z',metaKey:true,bubbles:true,cancelable:true}));await pause();
         if(ed.view.state.doc.toString()!==edited)throw new Error('Diff sort undo failed');
         if(document.querySelector('.md-diff')!==widget)throw new Error('Diff widget recreated during edit');
+        widget.querySelector('[aria-label="退出全屏代码对比"]').click();await pause();
+        if(dialog.open || widget.querySelector('[aria-label="Diff 左侧代码"]')!==left || ed.view.state.doc.toString()!==edited)throw new Error('Exiting fullscreen lost editor or content');
         return true;
         """#
         host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { result in

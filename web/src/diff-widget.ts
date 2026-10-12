@@ -47,12 +47,19 @@ export class DiffWidget extends WidgetType {
     const header = document.createElement("div");
     header.className = "diff-header";
     const body = document.createElement("div");
+    body.className = "diff-body";
     const status = document.createElement("div");
     status.className = "diff-status";
     status.setAttribute("role", "status");
     const toolbar = document.createElement("div");
     toolbar.className = "diff-toolbar";
-    el.append(toolbar, header, body, status);
+    const surface = document.createElement("div");
+    surface.className = "diff-surface";
+    surface.append(toolbar, header, body, status);
+    const fullscreen = document.createElement("dialog");
+    fullscreen.className = "diff-fullscreen";
+    fullscreen.setAttribute("aria-label", "全屏代码对比");
+    el.append(surface, fullscreen);
     const ui: DiffUI = {
       block: this.block,
       syncing: false,
@@ -158,6 +165,39 @@ export class DiffWidget extends WidgetType {
         };
         toolbar.append(button);
       }
+      const expand = document.createElement("button");
+      expand.type = "button";
+      expand.textContent = "全屏";
+      expand.setAttribute("aria-label", "全屏代码对比");
+      expand.setAttribute("aria-expanded", "false");
+      // 使用浏览器顶层对话框，复用两侧实例；占位高度避免正文因全屏发生跳动。
+      expand.onclick = () => {
+        if (fullscreen.open) {
+          fullscreen.close();
+          return;
+        }
+        el.style.height = el.getBoundingClientRect().height + "px";
+        fullscreen.append(surface);
+        fullscreen.showModal();
+        expand.textContent = "退出全屏";
+        expand.setAttribute("aria-label", "退出全屏代码对比");
+        expand.setAttribute("aria-expanded", "true");
+        ui.merge!.a.requestMeasure();
+        ui.merge!.b.requestMeasure();
+      };
+      fullscreen.addEventListener("close", () => {
+        if (ui.disposed) return;
+        el.prepend(surface);
+        el.style.height = "";
+        expand.textContent = "全屏";
+        expand.setAttribute("aria-label", "全屏代码对比");
+        expand.setAttribute("aria-expanded", "false");
+        expand.focus();
+        ui.merge!.a.requestMeasure();
+        ui.merge!.b.requestMeasure();
+        parent.requestMeasure();
+      });
+      toolbar.append(expand);
       for (const [index, label] of ["左侧", "右侧"].entries()) {
         const tools = document.createElement("div");
         tools.className = "diff-side-tools";

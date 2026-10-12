@@ -1502,3 +1502,32 @@ footer svg {
   border-bottom: 1px solid var(--line);
   background: var(--side);
 }
+
+/* 顶层对话框铺满应用内容区，避免被正文或分栏的宽度和溢出裁剪。 */
+dialog.diff-fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--paper);
+  color: var(--text);
+  overflow: hidden;
+}
+.diff-fullscreen .diff-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.diff-fullscreen .diff-body {
+  flex: 1;
+  min-height: 0;
+}
+.md-diff .diff-fullscreen .cm-mergeView {
+  height: 100%;
+  max-height: none;
+}
