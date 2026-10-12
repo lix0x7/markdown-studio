@@ -62,7 +62,43 @@ final class WebVerification {
         if attempts > 200 { fail("Frontend did not initialize"); return }
         host?.web.evaluateJavaScript("Boolean(window.editorAPI)") { [weak self] value, error in
             guard let self, self.timer != nil, value as? Bool == true else { return }
-            self.timer?.invalidate(); self.timer = nil; self.runImageMoveChecks()
+            self.timer?.invalidate(); self.timer = nil
+            if CommandLine.arguments.contains("--table-scroll-only") { self.runTableScrollChecks() } else { self.runImageMoveChecks() }
+        }
+    }
+    func runTableScrollChecks() {
+        let script = #"""
+        const ed=window.editorAPI.editor;
+        const pause=()=>new Promise(r=>setTimeout(r,60));
+        const source=('# Before\n\n'+('Paragraph before the table.\n\n'.repeat(150)))+('| Head | Value |\n| --- | --- |\n'+Array.from({length:250},(_,i)=>'| Row '+i+' | '+('content '.repeat(12))+' |').join('\n'))+'\n\nAfter';
+        ed.view.dispatch({changes:{from:0,to:ed.view.state.doc.length,insert:source},selection:{anchor:0},scrollIntoView:true});
+        for(let i=0;i<8;i++)await pause();
+        const scroller=ed.view.scrollDOM;
+        ed.view.dispatch({selection:{anchor:source.indexOf('| Head')-2},scrollIntoView:true});for(let i=0;i<8;i++)await pause();
+        const base=scroller.scrollTop+600;scroller.scrollTop=base;for(let i=0;i<8;i++)await pause();
+        const widget=ed.view.dom.querySelector('.md-table');
+        if(!widget || widget.getBoundingClientRect().height<scroller.clientHeight*2)throw new Error('Tall table fixture not rendered');
+        let removed=0;
+        const observer=new MutationObserver(records=>{for(const r of records)for(const node of r.removedNodes)if(node===widget || node.contains?.(widget))removed++;});
+        observer.observe(ed.view.contentDOM,{childList:true,subtree:true});
+        let drift=0;
+        for(let i=0;i<24;i++){
+          const at=base+i*65;scroller.scrollTop=at;await pause();
+          drift=Math.max(drift,Math.abs(scroller.scrollTop-at));
+          if(ed.view.dom.querySelector('.md-table')!==widget)throw new Error('Scrolling recreated or removed tall table');
+        }
+        observer.disconnect();
+        if(removed || drift>3)throw new Error('Tall table unstable: removed='+removed+' scrollDrift='+drift);
+        if(ed.view.state.doc.toString()!==source)throw new Error('Scrolling changed source');
+        return {removed,drift};
+        """#
+        host?.web.callAsyncJavaScript(script, arguments: [:], in: nil, in: .page) { result in
+            switch result {
+            case .failure(let error): self.fail("Table scroll: \(error)")
+            case .success(let value):
+                print("PASS: Tall table scrolling keeps widget and scroll position stable: \(value)")
+                fflush(stdout); self.host?.close(); exit(0)
+            }
         }
     }
     func runImageMoveChecks() {

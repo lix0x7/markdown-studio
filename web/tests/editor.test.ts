@@ -3,6 +3,8 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { SourceBuffer, parseTable, tablePatches } from "../src/source";
 import { MarkdownEditor } from "../src/editor";
 import { columnMarkup } from "../src/columns";
+import { EditorView } from "@codemirror/view";
+import { forceParsing } from "@codemirror/language";
 import { isolateHistory } from "@codemirror/commands";
 const editors: MarkdownEditor[] = [];
 beforeAll(() => {
@@ -320,4 +322,27 @@ it("mounts valid child columns inside an unsupported legacy wrapper", async () =
   await Promise.resolve();
   expect(ed.view.dom.querySelectorAll(".column-pane")).toHaveLength(2);
   expect(disk()).toBe(raw);
+});
+
+// 即使表格尚未进入视口，也必须保留其块替换，避免滚动改变高度模型。
+describe("table preview layout", () => {
+  it("keeps offscreen table block decorations while inline styles stay viewport scoped", () => {
+    const prefix = "Paragraph before the table.\n\n".repeat(350);
+    const table = "| Head | Value |\n| --- | --- |\n| A | B |";
+    const { ed } = create(prefix + table + "\n\nAfter");
+    forceParsing(ed.view, ed.view.state.doc.length, 1000);
+    const blocks: { from: number; to: number }[] = [];
+    for (const decorations of ed.view.state.facet(EditorView.decorations)) {
+      if (typeof decorations === "function") continue;
+      decorations.between(0, ed.view.state.doc.length, (from, to, value) => {
+        if (value.spec.block && value.spec.widget?.kind === "table")
+          blocks.push({ from, to });
+      });
+    }
+    expect(prefix.length).toBeGreaterThan(8000);
+    expect(blocks).toEqual([
+      { from: prefix.length, to: prefix.length + table.length },
+    ]);
+    expect(ed.view.state.doc.toString()).toBe(prefix + table + "\n\nAfter");
+  });
 });

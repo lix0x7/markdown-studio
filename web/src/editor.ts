@@ -638,7 +638,7 @@ class BlockWidget extends WidgetType {
     return true;
   }
 }
-// 只装饰视口附近的语法树节点；源码始终由 CodeMirror 文本模型持有。
+// 行内样式限制在视口附近；影响文档高度的表格替换不随滚动增删。
 function buildDecorations(
   state: EditorState,
   range: { from: number; to: number },
@@ -673,6 +673,32 @@ function buildDecorations(
   const hide = (from: number, to: number) => {
     if (to > from) out.push(Decoration.replace({}).range(from, to));
   };
+  // 表格预览与源码高度不同，若随视口移除替换，会让高度估算和滚动位置反复修正。
+  syntaxTree(state).iterate({
+    enter(n) {
+      if (columns.some((block) => n.from >= block.from && n.to <= block.to))
+        return false;
+      if (n.name === "Table" && !editing(n.from, n.to))
+        out.push(
+          Decoration.replace({
+            widget: new BlockWidget(
+              state.sliceDoc(n.from, n.to),
+              "table",
+              n.from,
+            ),
+            block: true,
+          }).range(n.from, n.to),
+        );
+      // 只进入可能包含表格的块级容器，避免遍历整篇文档的行内节点。
+      return [
+        "Document",
+        "Blockquote",
+        "BulletList",
+        "OrderedList",
+        "ListItem",
+      ].includes(n.name);
+    },
+  });
   syntaxTree(state).iterate({
     from: range.from,
     to: Math.min(range.to, state.doc.length),
@@ -683,15 +709,7 @@ function buildDecorations(
       if (columns.some((block) => from >= block.from && from < block.to))
         return false;
       if (name === "Table") {
-        if (!editing(from, to)) {
-          out.push(
-            Decoration.replace({
-              widget: new BlockWidget(state.sliceDoc(from, to), "table", from),
-              block: true,
-            }).range(from, to),
-          );
-          return false;
-        }
+        if (!editing(from, to)) return false;
         for (
           let i = state.doc.lineAt(Math.max(from, range.from)).number;
           i <=
@@ -832,7 +850,9 @@ const previewViewport = ViewPlugin.fromClass(
       this.timer = requestAnimationFrame(() => {
         const from = Math.max(0, view.viewport.from - 1000),
           to = Math.min(view.state.doc.length, view.viewport.to + 1000);
-        view.dispatch({ effects: viewport.of({ from, to }) });
+        const current = view.state.field(previewField).range;
+        if (from !== current.from || to !== current.to)
+          view.dispatch({ effects: viewport.of({ from, to }) });
       });
     }
     destroy() {
