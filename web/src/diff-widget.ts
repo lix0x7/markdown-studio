@@ -1,3 +1,4 @@
+import { search, searchKeymap, openSearchPanel } from "@codemirror/search";
 import { EditorView, WidgetType, keymap, lineNumbers } from "@codemirror/view";
 import { Transaction } from "@codemirror/state";
 import {
@@ -64,6 +65,7 @@ export class DiffWidget extends WidgetType {
       const actions = this.actions(parent);
       const extensions = (side: "left" | "right") => [
         lineNumbers(),
+        search({ top: true }),
         json(),
         syntaxHighlighting(defaultHighlightStyle),
         EditorView.contentAttributes.of({
@@ -86,6 +88,7 @@ export class DiffWidget extends WidgetType {
               return true;
             },
           },
+          ...searchKeymap,
           ...defaultKeymap,
           indentWithTab,
         ]),
@@ -124,6 +127,7 @@ export class DiffWidget extends WidgetType {
         title.textContent = label;
         tools.append(title);
         for (const [name, text] of [
+          ["find", "查找"],
           ["copy", "复制"],
           ["format", "格式化 JSON"],
           ["sort", "JSON 键排序"],
@@ -137,7 +141,9 @@ export class DiffWidget extends WidgetType {
             const view = index === 0 ? ui.merge!.a : ui.merge!.b;
             const source = view.state.doc.toString();
             try {
-              if (name === "copy") {
+              if (name === "find") {
+                openSearchPanel(view);
+              } else if (name === "copy") {
                 if (navigator.clipboard?.writeText)
                   await navigator.clipboard.writeText(source);
                 else {

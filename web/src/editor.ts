@@ -1510,7 +1510,13 @@ export class MarkdownEditor {
       });
   }
   find() {
-    openSearchPanel(this.view);
+    // 原生菜单会截获 ⌘F，按实际焦点把查找发送到 Diff 或分栏内的子编辑器。
+    const element = document.activeElement;
+    const focused =
+      element && this.view.dom.contains(element)
+        ? EditorView.findFromDOM(element as HTMLElement)
+        : null;
+    openSearchPanel(focused ?? this.view);
   }
   // 表格组件不会移动正文光标；提交前将撤销锚点定位到表格附近，并映射到父分栏。
   anchorHistory(from: number) {

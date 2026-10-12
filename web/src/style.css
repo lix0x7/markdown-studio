@@ -1483,3 +1483,11 @@ footer svg {
 .md-diff .cm-mergeSpacer {
   background: #f3f4f5;
 }
+
+.md-diff .cm-search {
+  padding: 8px !important;
+}
+.md-diff .cm-search .cm-textfield {
+  max-width: 100%;
+  box-sizing: border-box;
+}

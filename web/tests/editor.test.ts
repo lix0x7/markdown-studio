@@ -486,3 +486,56 @@ it("edits a diff inside a column and restores it through document undo", async (
   expect(disk()).toBe(raw);
   expect(left.state.doc.toString()).toBe("left");
 });
+
+it("searches each diff side independently, including native-menu find routing", async () => {
+  const { diffMarkup } = await import("../src/diff");
+  const {
+    searchPanelOpen,
+    SearchQuery,
+    setSearchQuery,
+    findNext,
+    closeSearchPanel,
+  } = await import("@codemirror/search");
+  const raw = diffMarkup("alpha one\nalpha two", "beta one\nbeta two");
+  const { ed, disk } = create(raw);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const widget = ed.view.dom.querySelector(".md-diff")!;
+  const left = EditorView.findFromDOM(
+    widget.querySelector(".cm-merge-a") as HTMLElement,
+  )!;
+  const right = EditorView.findFromDOM(
+    widget.querySelector(".cm-merge-b") as HTMLElement,
+  )!;
+  left.focus();
+  ed.find();
+  expect(searchPanelOpen(left.state)).toBe(true);
+  expect(searchPanelOpen(right.state)).toBe(false);
+  expect(searchPanelOpen(ed.view.state)).toBe(false);
+  left.dispatch({
+    effects: setSearchQuery.of(new SearchQuery({ search: "alpha" })),
+  });
+  expect(findNext(left)).toBe(true);
+  expect(
+    left.state.sliceDoc(
+      left.state.selection.main.from,
+      left.state.selection.main.to,
+    ),
+  ).toBe("alpha");
+  closeSearchPanel(left);
+  (
+    widget.querySelector('[aria-label="右侧查找"]') as HTMLButtonElement
+  ).click();
+  expect(searchPanelOpen(right.state)).toBe(true);
+  expect(searchPanelOpen(left.state)).toBe(false);
+  right.dispatch({
+    effects: setSearchQuery.of(new SearchQuery({ search: "beta" })),
+  });
+  expect(findNext(right)).toBe(true);
+  expect(
+    right.state.sliceDoc(
+      right.state.selection.main.from,
+      right.state.selection.main.to,
+    ),
+  ).toBe("beta");
+  expect(disk()).toBe(raw);
+});

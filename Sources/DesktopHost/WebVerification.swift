@@ -79,6 +79,13 @@ final class WebVerification {
         await pause();await pause();
         if(!ed.view.state.doc.toString().includes('900719925474099312345'))throw new Error('Diff did not sync to Markdown');
         if(!widget.querySelector('.cm-changedText'))throw new Error('Inline diff highlights missing');
+        left.focus();ed.find();await pause();
+        if(!widget.querySelector('.cm-merge-a .cm-search') || widget.querySelector('.cm-merge-b .cm-search'))throw new Error('Native find did not target left diff editor');
+        const search=widget.querySelector('.cm-merge-a .cm-search input[name="search"]');
+        search.value='900719925474099312345';search.dispatchEvent(new Event('change',{bubbles:true}));
+        search.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true,cancelable:true}));await pause();
+        if(window.getSelection().toString()!=='900719925474099312345')throw new Error('Diff find did not select matching text');
+        search.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));await pause();
         const edited=ed.view.state.doc.toString();
         widget.querySelector('[aria-label="左侧JSON 键排序"]').click();await pause();
         const data=JSON.parse(ed.view.state.doc.toString().split('```md-diff\n')[1].split('\n```')[0]);
