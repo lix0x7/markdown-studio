@@ -79,6 +79,32 @@ final class WebVerification {
         ed.toggle();await nextFrame();
         check(window.getSelection().toString()===expected,'Source mode retains native selected text');
         ed.toggle();ed.undo();check(ed.buffer.raw===saved,'Selection checks do not change saved source');
+        const tableStart=ed.view.state.doc.toString().indexOf('| a');
+        ed.view.dispatch({selection:{anchor:tableStart+2}});api.command('table');await nextFrame();await nextFrame();
+        let drawer=document.querySelector('.table-drawer');
+        check(!!drawer && !!drawer.querySelector('canvas'),'Glide canvas mounts inside table drawer');
+        check(Math.abs(drawer.getBoundingClientRect().width-window.innerWidth*0.8)<2,'Table drawer occupies 80 percent of window');
+        const canvas=drawer.querySelector('canvas'), canvasHost=drawer.querySelector('.table-canvas');
+        check(Math.abs(canvas.getBoundingClientRect().width-canvasHost.getBoundingClientRect().width)<24,'Glide canvas fills drawer width after portal mount');
+        const setCell=(value)=>{
+          const input=document.querySelector('input[aria-label="当前单元格内容"]');
+          input.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+          input.dispatchEvent(new Event('input',{bubbles:true}));input.blur();
+        };
+        setCell('renamed');await nextFrame();
+        check(ed.buffer.raw===saved,'Table draft edits do not modify document before applying');
+        api.command('undo');await nextFrame();
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='a','Table undo is isolated from document');
+        api.command('redo');await nextFrame();
+        check(document.querySelector('input[aria-label="当前单元格内容"]').value==='renamed','Table redo restores draft cell');
+        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='应用修改').click();await nextFrame();
+        check(ed.buffer.raw===saved.replace('| a  |','| renamed  |'),'Applying Glide edits changes only selected Markdown cell');
+        ed.undo();check(ed.buffer.raw===saved,'Applied table changes undo as one document edit');
+        ed.view.dispatch({selection:{anchor:tableStart+2}});api.command('table');await nextFrame();await nextFrame();
+        setCell('discarded');await nextFrame();drawer=document.querySelector('.table-drawer');
+        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='取消').click();await nextFrame();
+        [...drawer.querySelectorAll('button')].find(b=>b.textContent==='放弃修改').click();await nextFrame();
+        check(ed.buffer.raw===saved && !document.querySelector('.table-drawer'),'Discarding table draft preserves original source');
         const preferences=await api.request('getPreferences');
         try {
           const separator=document.querySelector('[role="separator"][aria-label="调整文档大纲宽度"]');

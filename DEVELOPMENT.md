@@ -56,3 +56,11 @@ swift test
 ```
 
 最后一项启动真实 WKWebView 执行集成验证，会在指定测试目录生成 Markdown、图片、草稿和 PDF；不修改用户文档。旧界面源码保留在 Git 提交 `3c00d75` 中。
+
+## Glide 表格抽屉
+
+点击表格编辑按钮，在右侧 80% 宽度抽屉中打开 Glide Data Grid；不足 900 px 的窗口使用全屏。支持区域选择、复制粘贴、Tab / Shift-Tab、列宽拖动、行列增删、列对齐和独立撤销重做。首行为 Markdown 表头。草稿在应用后才局部写回正文；取消已修改草稿时需要明确放弃。列宽只用于编辑，不写入 Markdown。
+
+组件固定为官方发布的 `@glideapps/glide-data-grid@6.0.4-alpha24`（MIT，声明支持 React 19）。稳定版 6.0.3 的依赖范围不覆盖当前 React/marked，因此采用此预发布版本，而未强制忽略依赖约束。marked 固定为兼容的 16.4.2，HTML 仍经 DOMPurify 清理。升级需要重新验证 WebKit 中文编辑、剪贴板、Portal 焦点。
+
+网格仅在抽屉打开时挂载，关闭时销毁。当前 IIFE 打包仍包含其代码，未使用独立网络懒加载。生产 JavaScript 约 1.33 MB，gzip 约 447 KB。公式、合并单元格及 Excel 文件导入导出未开放；粘贴作用于现有表格范围。

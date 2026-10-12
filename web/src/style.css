@@ -1024,3 +1024,111 @@ footer svg {
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
+
+/* 大表使用独立抽屉，网格在自己的容器内滚动，不改变正文布局。 */
+.table-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: 80vw;
+  height: 100dvh;
+  background: var(--paper);
+  color: var(--text);
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -12px 0 60px #0002;
+  outline: none;
+}
+.table-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--line);
+}
+.table-drawer-header h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+.table-drawer-header p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.table-drawer-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 24px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+}
+.table-drawer-toolbar button,
+.table-drawer-toolbar select,
+.table-drawer-footer button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--text);
+  font-size: 12px;
+}
+.table-drawer-toolbar button {
+  display: flex;
+  align-items: center;
+}
+.table-formula {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.table-formula span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.table-formula input {
+  flex: 1;
+  min-width: 0;
+  background: var(--paper);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 7px 10px;
+}
+.table-canvas {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.table-drawer-footer {
+  height: auto;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.table-drawer-footer > span:first-child {
+  margin-right: auto;
+  color: var(--muted);
+}
+.table-drawer-footer button.primary {
+  background: var(--accent);
+  color: var(--paper);
+}
+.glide-portal {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+}
+@media (max-width: 900px) {
+  .table-drawer {
+    width: 100vw;
+  }
+}

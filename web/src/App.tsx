@@ -1,3 +1,4 @@
+import TableDrawer from "./TableDrawer";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
@@ -135,11 +136,7 @@ export default function App() {
     [destination, setDestination] = useState(""),
     [language, setLanguage] = useState("text");
   const target = useRef({ from: 0, to: 0, image: false });
-  const [table, setTable] = useState<TableModel | null>(null),
-    [rows, setRows] = useState<string[][]>([]),
-    [aligns, setAligns] = useState<string[]>([]),
-    [column, setColumn] = useState(0),
-    [row, setRow] = useState(0);
+  const [table, setTable] = useState<TableModel | null>(null);
   const statTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -225,10 +222,6 @@ export default function App() {
   };
   const openTable = (model: TableModel) => {
     setTable(model);
-    setRows(model.rows.map((r) => r.map((c) => c.value)));
-    setAligns([...model.aligns]);
-    setColumn(0);
-    setRow(0);
   };
   async function importImages(files: File[]) {
     const ed = editor.current;
@@ -267,6 +260,14 @@ export default function App() {
     }
   }
   async function command(name: string) {
+    if (table) {
+      if (name === "undo" || name === "redo")
+        window.dispatchEvent(
+          new CustomEvent("table-command", { detail: name }),
+        );
+      return;
+    }
+
     const ed = editor.current;
     if (!ed) return;
     try {
@@ -960,123 +961,22 @@ export default function App() {
         </Modal>
       )}
       {table && (
-        <Modal
-          title="编辑表格"
-          description="Tab 切换单元格。修改仅作用于当前单元格或表格结构。"
+        <TableDrawer
+          table={table}
           close={() => setTable(null)}
-        >
-          <div className="table-controls">
-            <button
-              onClick={() =>
-                setRows((r) => [
-                  ...r.slice(0, row + 1),
-                  Array(aligns.length).fill(""),
-                  ...r.slice(row + 1),
-                ])
-              }
-            >
-              添加行
-            </button>
-            <button
-              disabled={row === 0}
-              onClick={() => {
-                setRows((r) => r.filter((_, i) => i !== row));
-                setRow(0);
-              }}
-            >
-              删除行
-            </button>
-            <button
-              onClick={() => {
-                setRows((r) =>
-                  r.map((v) => [
-                    ...v.slice(0, column + 1),
-                    "",
-                    ...v.slice(column + 1),
-                  ]),
-                );
-                setAligns((a) => [
-                  ...a.slice(0, column + 1),
-                  "left",
-                  ...a.slice(column + 1),
-                ]);
-              }}
-            >
-              添加列
-            </button>
-            <button
-              disabled={aligns.length === 1}
-              onClick={() => {
-                setRows((r) => r.map((v) => v.filter((_, i) => i !== column)));
-                setAligns((a) => a.filter((_, i) => i !== column));
-                setColumn(0);
-              }}
-            >
-              删除列
-            </button>
-            <select
-              aria-label="当前列对齐方式"
-              value={aligns[column]}
-              onChange={(e) =>
-                setAligns((a) =>
-                  a.map((v, i) => (i === column ? e.target.value : v)),
-                )
-              }
-            >
-              <option value="left">左对齐</option>
-              <option value="center">居中</option>
-              <option value="right">右对齐</option>
-            </select>
-          </div>
-          <div className="table-grid">
-            <table>
-              <tbody>
-                {rows.map((r, ri) => (
-                  <tr key={ri}>
-                    {r.map((v, ci) => (
-                      <td key={ci}>
-                        <input
-                          aria-label={`第 ${ri + 1} 行，第 ${ci + 1} 列`}
-                          value={v}
-                          onFocus={() => {
-                            setRow(ri);
-                            setColumn(ci);
-                          }}
-                          onChange={(e) =>
-                            setRows((rr) =>
-                              rr.map((r, i) =>
-                                i === ri
-                                  ? r.map((c, j) =>
-                                      j === ci ? e.target.value : c,
-                                    )
-                                  : r,
-                              ),
-                            )
-                          }
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="dialog-footer">
-            <span>
-              第 {row + 1} 行 · 第 {column + 1} 列
-            </span>
-            <button onClick={() => setTable(null)}>取消</button>
-            <button
-              className="primary"
-              onClick={() => {
-                editor.current?.apply(tablePatches(table, rows, aligns));
-                setTable(null);
-              }}
-            >
-              应用修改
-            </button>
-          </div>
-        </Modal>
+          apply={(rows, aligns) => {
+            const ed = editor.current;
+            if (!ed) return;
+            if (
+              ed.view.state.sliceDoc(table.from, table.to) !== table.original
+            ) {
+              setError("正文中的表格已变化，请重新打开表格编辑器。");
+              return;
+            }
+            ed.apply(tablePatches(table, rows, aligns));
+            setTable(null);
+          }}
+        />
       )}
     </div>
   );
