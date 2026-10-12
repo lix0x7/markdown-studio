@@ -279,3 +279,33 @@ it("moves an image between columns with a single document undo", async () => {
   ed.undo();
   expect(disk()).toBe(raw);
 });
+
+it("restores long base64 image previews after leaving reference editing", () => {
+  const image =
+    "![image.png](<data:image/png;base64," + "A".repeat(150000) + ">)";
+  const raw = "# Before\n\n" + image + "\n\nAfter\n";
+  const { ed } = create(raw);
+  ed.view.dispatch({ selection: { anchor: raw.indexOf(image) + 2 } });
+  expect(ed.view.dom.querySelector(".md-image")).toBeNull();
+  ed.view.dispatch({ selection: { anchor: raw.indexOf("After") } });
+  expect(ed.view.dom.querySelector(".md-image")).not.toBeNull();
+  expect(ed.buffer.raw).toBe(raw);
+});
+
+it("restores an image preview when reference editing loses focus", async () => {
+  const raw =
+    "# Before\n\n![image](<data:image/png;base64," +
+    "A".repeat(150000) +
+    ">)\n\nAfter";
+  const { ed } = create(raw);
+  ed.view.focus();
+  ed.view.dispatch({ selection: { anchor: raw.indexOf("![image]") + 2 } });
+  expect(ed.view.dom.querySelector(".md-image")).toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const outside = document.createElement("button");
+  document.body.append(outside);
+  outside.focus();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(ed.view.dom.querySelector(".md-image")).not.toBeNull();
+  expect(ed.buffer.raw).toBe(raw);
+});

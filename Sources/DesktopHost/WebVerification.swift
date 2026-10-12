@@ -90,6 +90,16 @@ final class WebVerification {
           ed.undo();await pause();
           if(ed.view.state.doc.toString()!==source)throw new Error('Image move did not undo in one step');
         }
+        ed.view.dispatch({selection:{anchor:source.indexOf(image)+2}});ed.view.focus();await pause();
+        if(document.querySelector('.md-image'))throw new Error('Image reference did not enter editing');
+        const outside=document.createElement('button');document.body.append(outside);outside.focus();await pause();
+        if(!document.querySelector('.md-image'))throw new Error('Image preview did not recover after focus left editor');
+        outside.remove();
+        ed.view.focus();await pause();
+        if(document.querySelector('.md-image'))throw new Error('Refocusing reference did not restore source editing');
+        ed.view.dispatch({selection:{anchor:source.length}});await pause();
+        if(!document.querySelector('.md-image'))throw new Error('Moving caret to other text did not restore image');
+        if(ed.view.state.doc.toString()!==source)throw new Error('Focus change modified image source');
         ed.undo();
         ed.view.dispatch({selection:{anchor:0},scrollIntoView:true});
         return true;
@@ -99,7 +109,9 @@ final class WebVerification {
             case .failure(let error): self.fail("Image move: \(error)")
             case .success:
                 print("PASS: Image drag moves source with caption and layout, without copies, and undoes in one step")
+                print("PASS: Image preview restores after reference editing loses focus without changing source")
                 fflush(stdout)
+                if CommandLine.arguments.contains("--image-focus-only") { self.host?.close(); exit(0) }
                 self.runEditorChecks()
             }
         }

@@ -59,6 +59,7 @@ import { parseColumns, columnMarkup, type ColumnBlock } from "./columns";
 import { clipboardTable } from "./clipboard-table";
 
 export const mode = new Compartment();
+const previewFocus = StateEffect.define<boolean>();
 const viewport = StateEffect.define<{ from: number; to: number }>();
 export const renderHTML = (text: string): string => {
   const blocks = parseColumns(text);
@@ -641,6 +642,7 @@ class BlockWidget extends WidgetType {
 function buildDecorations(
   state: EditorState,
   range: { from: number; to: number },
+  focused = true,
 ): DecorationSet {
   const out: Range<Decoration>[] = [];
   const columns = parseColumns(state.doc.toString());
@@ -708,7 +710,7 @@ function buildDecorations(
       ) {
         if (name === "HTMLBlock") to = state.doc.lineAt(from).to;
         const l = state.doc.lineAt(from);
-        if (!editing(from, to) && l.from === from && l.to === to) {
+        if (!(focused && editing(from, to)) && l.from === from && l.to === to) {
           out.push(
             Decoration.replace({
               widget: new BlockWidget(state.sliceDoc(from, to), "image", from),
@@ -781,23 +783,37 @@ function buildDecorations(
   return Decoration.set(out, true);
 }
 const previewField = StateField.define<{
+  focused: boolean;
   range: { from: number; to: number };
   decorations: DecorationSet;
 }>({
   create(state) {
     const range = { from: 0, to: 8000 };
-    return { range, decorations: buildDecorations(state, range) };
+    return {
+      focused: true,
+      range,
+      decorations: buildDecorations(state, range),
+    };
   },
   update(value, tr) {
-    let range = value.range;
-    for (const e of tr.effects) if (e.is(viewport)) range = e.value;
+    let range = value.range,
+      focused = value.focused;
+    for (const e of tr.effects) {
+      if (e.is(viewport)) range = e.value;
+      if (e.is(previewFocus)) focused = e.value;
+    }
     if (
       tr.docChanged ||
       tr.selection ||
       range !== value.range ||
+      focused !== value.focused ||
       syntaxTree(tr.startState) !== syntaxTree(tr.state)
     )
-      return { range, decorations: buildDecorations(tr.state, range) };
+      return {
+        focused,
+        range,
+        decorations: buildDecorations(tr.state, range, focused),
+      };
     return value;
   },
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations),
@@ -860,7 +876,19 @@ const base64ImageLines = ViewPlugin.fromClass(
   },
   { decorations: (plugin) => plugin.decorations },
 );
-const preview: Extension = [previewField, previewViewport];
+const preview: Extension = [
+  previewField,
+  previewViewport,
+  // 失焦时选区仍保留在源码行，需单独通知预览恢复图片，而非等待下一次光标移动。
+  EditorView.domEventHandlers({
+    focus: (_event, view) => {
+      view.dispatch({ effects: previewFocus.of(true) });
+    },
+    blur: (_event, view) => {
+      view.dispatch({ effects: previewFocus.of(false) });
+    },
+  }),
+];
 const restoreEndings = StateEffect.define<string[]>();
 // 撤销历史保存换行元数据，让混合 CRLF/LF 的跨行删除也可精确恢复。
 const endingsField = StateField.define<string[]>({
