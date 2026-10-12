@@ -53,6 +53,49 @@ export default function TableDrawer({
       rangeStack: [],
     },
   });
+  const beforeClick = useRef(selection);
+  const selectionAnchor = useRef<{
+    axis: "rows" | "columns";
+    index: number;
+  } | null>(null);
+  // 使用按下前的选区处理两种平台修饰键，避免网格默认点击先覆盖多选范围。
+  const selectAxis = (
+    axis: "rows" | "columns",
+    index: number,
+    event: {
+      ctrlKey: boolean;
+      metaKey: boolean;
+      shiftKey: boolean;
+      preventDefault: () => void;
+    },
+  ) => {
+    event.preventDefault();
+    const previous = beforeClick.current[axis];
+    const additive = event.ctrlKey || event.metaKey;
+    const anchor = selectionAnchor.current;
+    let next = CompactSelection.fromSingleSelection(index);
+    if (event.shiftKey && anchor?.axis === axis) {
+      const range: [number, number] = [
+        Math.min(anchor.index, index),
+        Math.max(anchor.index, index) + 1,
+      ];
+      next = additive
+        ? previous.add(range)
+        : CompactSelection.fromSingleSelection(range);
+    } else {
+      if (additive)
+        next = previous.hasIndex(index)
+          ? previous.remove(index)
+          : previous.add(index);
+      selectionAnchor.current = { axis, index };
+    }
+    setSelection({
+      rows: CompactSelection.empty(),
+      columns: CompactSelection.empty(),
+      [axis]: next,
+    });
+    root?.querySelector("canvas")?.focus();
+  };
   const [rowMenu, setRowMenu] = useState<{
     row: number;
     x: number;
@@ -109,6 +152,7 @@ export default function TableDrawer({
   }, []);
   const undo = () => {
     if (!history.length) return;
+    selectionAnchor.current = null;
     const previous = history[history.length - 1];
     if (!sync.current(previous.rows, previous.aligns, "undo")) return;
     const present = current.current;
@@ -130,6 +174,7 @@ export default function TableDrawer({
   const redo = () => {
     if (!future.length) return;
     if (!sync.current(future[0].rows, future[0].aligns, "redo")) return;
+    selectionAnchor.current = null;
     const present = current.current;
     setHistory((h) => [...h, present]);
     current.current = future[0];
@@ -205,6 +250,17 @@ export default function TableDrawer({
   };
   const changeRow = (action: RowAction, at = row) => {
     setRowMenu(null);
+    if (action === "delete" && selection.rows.length > 1) {
+      const rows = draft.rows.filter(
+        (_, i) => i === 0 || !selection.rows.hasIndex(i),
+      );
+      update({ ...draft, rows });
+      setSelection({
+        rows: CompactSelection.empty(),
+        columns: CompactSelection.empty(),
+      });
+      return;
+    }
     if (action === "up" || action === "down") {
       moveRow(at, at + (action === "up" ? -1 : 1));
       return;
@@ -226,14 +282,27 @@ export default function TableDrawer({
     [
       { action: "before", label: "上方插入行", disabled: row === 0 },
       { action: "after", label: "下方插入行", disabled: false },
-      { action: "delete", label: "删除行", disabled: row === 0 },
+      {
+        action: "delete",
+        label: "删除行",
+        disabled:
+          selection.rows.length > 1
+            ? [...selection.rows].every((i) => i === 0)
+            : row === 0,
+      },
       { action: "up", label: "上移行", disabled: row <= 1 },
       {
         action: "down",
         label: "下移行",
         disabled: row === 0 || row === draft.rows.length - 1,
       },
-    ];
+    ].map((item) => ({
+      ...item,
+      action: item.action as RowAction,
+      disabled:
+        item.disabled ||
+        (selection.rows.length > 1 && item.action !== "delete"),
+    }));
   // 列结构变更同时移动表头、数据、对齐和列宽，并保留操作后的选中位置。
   const moveColumn = (from: number, to: number) => {
     if (from === to) return;
@@ -251,6 +320,22 @@ export default function TableDrawer({
   };
   const changeColumn = (action: ColumnAction, at = column) => {
     setColumnMenu(null);
+    if (action === "delete" && selection.columns.length > 1) {
+      const order = draft.aligns
+        .map((_, i) => i)
+        .filter((i) => !selection.columns.hasIndex(i));
+      if (!order.length) return;
+      update({
+        rows: draft.rows.map((r) => order.map((i) => r[i])),
+        aligns: order.map((i) => draft.aligns[i]),
+      });
+      setWidths(order.map((i) => widths[i] ?? 200));
+      setSelection({
+        rows: CompactSelection.empty(),
+        columns: CompactSelection.empty(),
+      });
+      return;
+    }
     if (action === "ascending" || action === "descending") {
       update(sortTable(current.current, at, action === "descending"));
       return;
@@ -294,14 +379,26 @@ export default function TableDrawer({
     },
     { action: "before", label: "左侧插入列", disabled: false },
     { action: "after", label: "右侧插入列", disabled: false },
-    { action: "delete", label: "删除列", disabled: draft.aligns.length === 1 },
+    {
+      action: "delete",
+      label: "删除列",
+      disabled:
+        draft.aligns.length === 1 ||
+        selection.columns.length === draft.aligns.length,
+    },
     { action: "left", label: "左移列", disabled: column === 0 },
     {
       action: "right",
       label: "右移列",
       disabled: column === draft.aligns.length - 1,
     },
-  ];
+  ].map((item) => ({
+    ...item,
+    action: item.action as ColumnAction,
+    disabled:
+      item.disabled ||
+      (selection.columns.length > 1 && item.action !== "delete"),
+  }));
   return (
     <Dialog.Root
       open
@@ -329,7 +426,7 @@ export default function TableDrawer({
               <Dialog.Description>
                 首行为表头 · F2 / 双击编辑 · Enter / Tab 连续编辑 ·
                 拖动行号／列头调整顺序 · 右键行号／列头操作 · 框选后 ⌘C / ⌘V
-                复制粘贴
+                复制粘贴 · Ctrl / ⌘ 点选行列，Shift 连选
               </Dialog.Description>
             </div>
             <button
@@ -367,7 +464,13 @@ export default function TableDrawer({
                 update({
                   ...draft,
                   aligns: draft.aligns.map((v, i) =>
-                    i === column ? e.target.value : v,
+                    (
+                      selection.columns.length
+                        ? selection.columns.hasIndex(i)
+                        : i === column
+                    )
+                      ? e.target.value
+                      : v,
                   ),
                 })
               }
@@ -410,7 +513,13 @@ export default function TableDrawer({
               }}
             />
           </div>
-          <div className="table-canvas" ref={setRoot}>
+          <div
+            className="table-canvas"
+            ref={setRoot}
+            onPointerDownCapture={() => {
+              beforeClick.current = selection;
+            }}
+          >
             <DataEditor
               width={size.width}
               height={size.height}
@@ -420,15 +529,25 @@ export default function TableDrawer({
                 downFill: true,
                 rightFill: true,
               }}
+              rowSelect="multi"
+              columnSelect="multi"
+              onHeaderClicked={(col, event) =>
+                selectAxis("columns", col, event)
+              }
+              onCellClicked={([col, row], event) => {
+                if (col === -1) selectAxis("rows", row, event);
+                else selectionAnchor.current = null;
+              }}
               onColumnMoved={moveColumn}
               onRowMoved={moveRow}
               onCellContextMenu={([, r], event) => {
                 event.preventDefault();
                 setColumnMenu(null);
-                setSelection({
-                  rows: CompactSelection.fromSingleSelection(r),
-                  columns: CompactSelection.empty(),
-                });
+                if (!selection.rows.hasIndex(r))
+                  setSelection({
+                    rows: CompactSelection.fromSingleSelection(r),
+                    columns: CompactSelection.empty(),
+                  });
                 setRowMenu({
                   row: r,
                   x: event.bounds.x,
@@ -436,10 +555,11 @@ export default function TableDrawer({
                 });
               }}
               onHeaderMenuClick={(col, bounds) => {
-                setSelection({
-                  columns: CompactSelection.fromSingleSelection(col),
-                  rows: CompactSelection.empty(),
-                });
+                if (!selection.columns.hasIndex(col))
+                  setSelection({
+                    columns: CompactSelection.fromSingleSelection(col),
+                    rows: CompactSelection.empty(),
+                  });
                 setRowMenu(null);
                 setColumnMenu({
                   column: col,
@@ -449,10 +569,11 @@ export default function TableDrawer({
               }}
               onHeaderContextMenu={(col, event) => {
                 event.preventDefault();
-                setSelection({
-                  columns: CompactSelection.fromSingleSelection(col),
-                  rows: CompactSelection.empty(),
-                });
+                if (!selection.columns.hasIndex(col))
+                  setSelection({
+                    columns: CompactSelection.fromSingleSelection(col),
+                    rows: CompactSelection.empty(),
+                  });
                 setRowMenu(null);
                 setColumnMenu({
                   column: col,
@@ -528,6 +649,10 @@ export default function TableDrawer({
           <footer className="table-drawer-footer">
             <span>
               {draft.rows.length} 行 × {draft.aligns.length} 列
+              {selection.rows.length > 0 &&
+                ` · 已选 ${selection.rows.length} 行`}
+              {selection.columns.length > 0 &&
+                ` · 已选 ${selection.columns.length} 列`}
               {" · 实时同步正文"}
             </span>
             <button onClick={close}>关闭</button>

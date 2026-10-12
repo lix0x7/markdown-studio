@@ -104,7 +104,8 @@ final class WebVerification {
         const writingWidth=document.querySelector('.editor-host').getBoundingClientRect().width;
         check(Math.abs(tableScroll.getBoundingClientRect().width-(writingWidth-48))<2,'Table viewport fills editor width with side gutters');
         const paragraphWidth=ed.view.contentDOM.getBoundingClientRect().width;
-        check(paragraphWidth<=796,'Normal writing column retains its reading width');
+        const widthMode=document.querySelector('.app').dataset.pageWidth;
+        check(paragraphWidth<=(widthMode==='full'?writingWidth:widthMode==='wide'?1100:796)+1,'Writing column respects configured page width');
         check(wideTable.getBoundingClientRect().width<=window.innerWidth*2+2,'Preview table stays within twice the window width');
         check(tableScroll.scrollWidth>tableScroll.clientWidth,'Wide preview table overflows its own scroll container');
         tableScroll.scrollLeft=120;
@@ -174,6 +175,34 @@ final class WebVerification {
           tableButton('降序排列').click();await nextFrame();
           canvas.focus();const descending=new DataTransfer();canvas.dispatchEvent(new ClipboardEvent('copy',{clipboardData:descending,bubbles:true,cancelable:true}));await nextFrame();
           check(descending.getData('text/plain')===pasted,'Descending sort keeps empty values last');
+          // 真实网格坐标触发鼠标事件，验证修饰键选择与批量操作。
+          const clickGrid=async(x,y,modifiers={})=>{
+            const b=canvas.getBoundingClientRect(), init={clientX:b.x+x,clientY:b.y+y,button:0,bubbles:true,cancelable:true,...modifiers};
+            canvas.dispatchEvent(new PointerEvent('pointerdown',{...init,buttons:1,pointerType:'mouse',pointerId:1}));
+            canvas.dispatchEvent(new PointerEvent('pointerup',{...init,pointerType:'mouse',pointerId:1}));await nextFrame();
+          };
+          const selected=(label)=>drawer.querySelector('.table-drawer-footer').textContent.includes(label);
+          await clickGrid(20,96);await clickGrid(20,176,{ctrlKey:true});
+          check(selected('已选 2 行'),'Ctrl selects nonadjacent rows');
+          check(document.activeElement===canvas,'Row selection focuses grid for keyboard copy');
+          const rowCopy=new DataTransfer();canvas.dispatchEvent(new ClipboardEvent('copy',{clipboardData:rowCopy,bubbles:true,cancelable:true}));await nextFrame();
+          check(rowCopy.getData('text/plain')==='10\t十\tA\n\t空\tC','Selected rows copy all columns');
+          await clickGrid(20,136,{shiftKey:true});check(selected('已选 2 行'),'Shift selects contiguous rows from anchor');
+          await clickGrid(20,136,{ctrlKey:true});check(selected('已选 1 行'),'Ctrl toggles a selected row off');
+          await clickGrid(20,96,{metaKey:true});check(selected('已选 2 行'),'Command also selects multiple rows');
+          tableButton('删除行').click();await nextFrame();
+          check(drawer.querySelector('.table-drawer-footer').textContent.includes('2 行 × 3 列'),'Delete removes all selected data rows');
+          api.command('undo');await nextFrame();
+          await clickGrid(130,18);await clickGrid(530,18,{ctrlKey:true});
+          check(selected('已选 2 列'),'Ctrl selects nonadjacent columns');
+          await clickGrid(330,18,{shiftKey:true});check(selected('已选 2 列'),'Shift selects contiguous columns');
+          await clickGrid(330,18,{ctrlKey:true});check(selected('已选 1 列'),'Ctrl toggles a selected column off');
+          await clickGrid(130,18,{metaKey:true});check(selected('已选 2 列'),'Command selects multiple columns');
+          tableButton('删除列').click();await nextFrame();
+          check(drawer.querySelector('.table-drawer-footer').textContent.includes('4 行 × 1 列'),'Delete removes selected columns together');
+          check(document.querySelector('input[aria-label="当前单元格内容"]').value==='名称','Column deletion preserves the unselected column');
+          api.command('undo');await nextFrame();
+
           api.command('undo');await nextFrame();api.command('undo');await nextFrame();api.command('undo');await nextFrame();
           check(drawer.querySelector('.table-drawer-footer').textContent.includes('2 行 × 2 列'),'Paste and sorts each undo in one step');
           check(ed.buffer.raw===saved,'Undo of clipboard and sorting restores original source');
