@@ -79,6 +79,20 @@ final class WebVerification {
         ed.toggle();await nextFrame();
         check(window.getSelection().toString()===expected,'Source mode retains native selected text');
         ed.toggle();ed.undo();check(ed.buffer.raw===saved,'Selection checks do not change saved source');
+        // 用真实布局验证横向滚动和超长文本的宽度上限。
+        const wideFixture='\n\n| Alpha | Beta | Gamma |\n| --- | --- | --- |\n| '+('unbroken'.repeat(180))+' | '+('中文内容'.repeat(80))+' | tail |\n\n';
+        const wideEnd=ed.view.state.doc.length;
+        ed.view.dispatch({changes:{from:wideEnd,insert:wideFixture},selection:{anchor:0},userEvent:'input'});
+        ed.view.dispatch({selection:{anchor:ed.view.state.doc.length},scrollIntoView:true});
+        await nextFrame();await nextFrame();
+        const tableScroll=[...document.querySelectorAll('.table-scroll')].at(-1);
+        const wideTable=tableScroll.querySelector('table');
+        check(wideTable.getBoundingClientRect().width<=window.innerWidth*2+2,'Preview table stays within twice the window width');
+        check(tableScroll.scrollWidth>tableScroll.clientWidth,'Wide preview table overflows its own scroll container');
+        tableScroll.scrollLeft=120;
+        check(tableScroll.scrollLeft>0,'Preview table scrolls horizontally');
+        check(ed.view.scrollDOM.scrollWidth<=ed.view.scrollDOM.clientWidth+2,'Wide table does not widen the document');
+        ed.undo();check(ed.buffer.raw===saved,'Table layout does not alter Markdown source');
         const tableStart=ed.view.state.doc.toString().indexOf('| a');
         ed.view.dispatch({selection:{anchor:tableStart+2}});api.command('table');await nextFrame();await nextFrame();
         let drawer=document.querySelector('.table-drawer');

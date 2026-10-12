@@ -498,10 +498,22 @@ main {
   margin: 0;
   padding: 12px 0 18px;
 }
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.md-table table {
+  /* 优先按内容展开，达到窗口两倍宽度后才允许软换行。 */
+  width: max-content;
+  min-width: 100%;
+  max-width: 200vw;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .md-widget table {
   border-collapse: separate;
   border-spacing: 0;
-  width: 100%;
   border: 1px solid var(--line);
   border-radius: 7px;
   overflow: hidden;

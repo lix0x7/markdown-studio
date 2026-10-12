@@ -80,6 +80,14 @@ class BlockWidget extends WidgetType {
     el.className = "md-widget md-" + this.kind;
     el.innerHTML = renderHTML(this.text);
     if (this.kind === "table") {
+      // 横向滚动限定在表格内部，编辑按钮保持在可见容器右侧。
+      const scroll = document.createElement("div");
+      scroll.className = "table-scroll";
+      scroll.tabIndex = 0;
+      scroll.setAttribute("role", "region");
+      scroll.setAttribute("aria-label", "表格，可左右滚动");
+      scroll.append(...Array.from(el.childNodes));
+      el.append(scroll);
       const button = document.createElement("button");
       button.className = "table-edit";
       button.textContent = "编辑表格";
